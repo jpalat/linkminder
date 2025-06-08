@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load persisted settings
   async function loadSettings() {
     const result = await chrome.storage.local.get('autoClose');
-    autoCloseCheckbox.checked = result.autoClose ?? true;
+    autoCloseCheckbox.checked = result.autoClose ?? false;
   }
   
   // Save settings
@@ -138,8 +138,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         showStatus('Bookmark saved successfully!');
         
         if (autoCloseCheckbox.checked) {
-          setTimeout(() => {
-            window.close();
+          setTimeout(async () => {
+            // Close the current browser tab (where the bookmark was saved from)
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+              chrome.tabs.remove(tab.id);
+            }
           }, 1500);
         }
       } else {
