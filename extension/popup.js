@@ -42,9 +42,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveBtn.textContent = 'Saving...';
     
     try {
+      // Get the full page data including content
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const pageData = await chrome.tabs.sendMessage(tab.id, { action: 'getPageData' });
+      
       const response = await chrome.runtime.sendMessage({
         action: 'saveBookmark',
-        data: { url, title, description }
+        data: { 
+          url, 
+          title, 
+          description, 
+          content: pageData.content 
+        }
       });
       
       if (response.success) {

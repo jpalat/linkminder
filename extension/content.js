@@ -3,7 +3,9 @@ function getPageData() {
   const title = document.title;
   
   let description = '';
+  let content = '';
   
+  // Get meta description
   const metaDescription = document.querySelector('meta[name="description"]');
   if (metaDescription) {
     description = metaDescription.getAttribute('content');
@@ -14,10 +16,40 @@ function getPageData() {
     }
   }
   
+  // Extract main content
+  const contentSelectors = [
+    'main',
+    'article', 
+    '[role="main"]',
+    '.content',
+    '.main-content',
+    '#content',
+    '#main'
+  ];
+  
+  let mainElement = null;
+  for (const selector of contentSelectors) {
+    mainElement = document.querySelector(selector);
+    if (mainElement) break;
+  }
+  
+  if (!mainElement) {
+    mainElement = document.body;
+  }
+  
+  // Extract text content, cleaning up whitespace
+  if (mainElement) {
+    content = mainElement.innerText
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 2000); // Limit to 2000 characters
+  }
+  
   return {
     url,
     title,
-    description
+    description,
+    content
   };
 }
 

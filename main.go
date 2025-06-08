@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -14,6 +16,7 @@ type BookmarkRequest struct {
 	URL         string `json:"url"`
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
+	Content     string `json:"content,omitempty"`
 }
 
 func main() {
@@ -67,11 +70,11 @@ func writeToCSV(req BookmarkRequest) error {
 	}
 
 	if stat.Size() == 0 {
-		writer.Write([]string{"timestamp", "url", "title", "description"})
+		writer.Write([]string{"timestamp", "url", "title", "description", "content"})
 	}
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	record := []string{timestamp, req.URL, req.Title, req.Description}
+	record := []string{timestamp, req.URL, req.Title, req.Description, req.Content}
 	
 	return writer.Write(record)
 }
