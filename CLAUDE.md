@@ -43,11 +43,24 @@ The API accepts JSON requests with this structure:
 }
 ```
 
-CSV output format: `timestamp,url,title,description`
+CSV output format: `timestamp,url,title,description,content,action,shareTo,topic`
 
 ## Development Notes
 
-- Port can be changed by modifying both the print statement and `ListenAndServe` call in `main.go`
+- Port can be changed by modifying the `port` variable in `main.go`
 - CSV file is created automatically with headers on first write
 - No external dependencies means no `go.sum` file or dependency management needed
 - Repository is not yet committed to git - files are staged for initial commit
+
+## Logging
+
+The API includes comprehensive logging for debugging and monitoring:
+
+- **Startup logs**: Server initialization and endpoint registration
+- **Request logs**: HTTP method, endpoint, and client IP for all requests
+- **Validation logs**: Details about failed validations (missing fields, invalid JSON)
+- **CSV operation logs**: File operations, record writing, and topic extraction
+- **Success logs**: Confirmation of successful operations
+- **Error logs**: Detailed error information for troubleshooting
+
+All logs include timestamps and are written to stdout/stderr.
