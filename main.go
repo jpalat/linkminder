@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 )
 
@@ -17,10 +15,14 @@ type BookmarkRequest struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
 	Content     string `json:"content,omitempty"`
+	Action      string `json:"action,omitempty"`
+	ShareTo     string `json:"shareTo,omitempty"`
+	Topic       string `json:"topic,omitempty"`
 }
 
 func main() {
 	http.HandleFunc("/bookmark", handleBookmark)
+	http.HandleFunc("/topics", handleTopics)
 	
 	fmt.Println("Server starting on :9090")
 	log.Fatal(http.ListenAndServe(":9090", nil))
@@ -52,6 +54,22 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
+func handleTopics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	topics, err := getTopicsFromCSV()
+	if err != nil {
+		http.Error(w, "Failed to get topics", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string][]string{"topics": topics})
+}
+
 func writeToCSV(req BookmarkRequest) error {
 	filename := "bookmarks.csv"
 	
@@ -70,11 +88,53 @@ func writeToCSV(req BookmarkRequest) error {
 	}
 
 	if stat.Size() == 0 {
-		writer.Write([]string{"timestamp", "url", "title", "description", "content"})
+		writer.Write([]string{"timestamp", "url", "title", "description", "content", "action", "shareTo", "topic"})
 	}
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	record := []string{timestamp, req.URL, req.Title, req.Description, req.Content}
+	record := []string{timestamp, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic}
 	
 	return writer.Write(record)
+}
+
+func getTopicsFromCSV() ([]string, error) {
+	filename := "bookmarks.csv"
+	
+	file, err := os.Open(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	topicSet := make(map[string]bool)
+	
+	// Skip header row if it exists
+	startIndex := 0
+	if len(records) > 0 && records[0][0] == "timestamp" {
+		startIndex = 1
+	}
+	
+	// Extract topics from records (topic is in column 7)
+	for i := startIndex; i < len(records); i++ {
+		if len(records[i]) > 7 && records[i][7] != "" {
+			topicSet[records[i][7]] = true
+		}
+	}
+	
+	// Convert to sorted slice
+	topics := make([]string, 0, len(topicSet))
+	for topic := range topicSet {
+		topics = append(topics, topic)
+	}
+	
+	return topics, nil
 }

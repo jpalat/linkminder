@@ -27,7 +27,7 @@
             color: #555;
         }
         
-        input, textarea {
+        input, textarea, select {
             width: 100%;
             padding: 8px;
             border: 1px solid #ddd;
@@ -80,6 +80,30 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        
+        .conditional-field {
+            display: none;
+        }
+        
+        .conditional-field.show {
+            display: block;
+        }
+        
+        .settings {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
+        }
+        
+        .checkbox-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-field input[type="checkbox"] {
+            width: auto;
+        }
     </style>
 </head>
 <body>
@@ -100,7 +124,34 @@
         <textarea id="description" placeholder="Optional description..."></textarea>
     </div>
     
+    <div class="field">
+        <label for="action">Action:</label>
+        <select id="action">
+            <option value="read-later">Read Later</option>
+            <option value="share">Share</option>
+            <option value="working">Working</option>
+        </select>
+    </div>
+    
+    <div class="field conditional-field" id="shareField">
+        <label for="shareTo">Share with:</label>
+        <input type="text" id="shareTo" placeholder="Person or organization...">
+    </div>
+    
+    <div class="field conditional-field" id="topicField">
+        <label for="topic">Topic:</label>
+        <input type="text" id="topic" placeholder="Enter or select topic..." list="topicSuggestions">
+        <datalist id="topicSuggestions"></datalist>
+    </div>
+    
     <button id="saveBtn">Save Bookmark</button>
+    
+    <div class="settings">
+        <div class="checkbox-field">
+            <input type="checkbox" id="autoClose">
+            <label for="autoClose">Auto-close after saving</label>
+        </div>
+    </div>
     
     <div id="status" class="status" style="display: none;"></div>
     
