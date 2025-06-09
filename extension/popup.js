@@ -63,6 +63,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     topicField.classList.toggle('show', selectedAction === 'working');
   }
   
+  // Helper function to get page data with fallback
+  async function getPageDataSafely(tab) {
+    // Check if this is a restricted page
+    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || 
+        tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
+      return {
+        url: tab.url,
+        title: tab.title || 'Unknown Page',
+        description: '',
+        content: ''
+      };
+    }
+    
+    try {
+      // First try to send message to existing content script
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageData' });
+      return response;
+    } catch (error) {
+      // Content script not available, try to inject it
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        
+        // Wait a bit for the script to load
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Try again
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageData' });
+        return response;
+      } catch (injectError) {
+        // Fallback to basic tab info
+        console.warn('Could not inject content script:', injectError);
+        return {
+          url: tab.url,
+          title: tab.title || 'Unknown Page',
+          description: '',
+          content: ''
+        };
+      }
+    }
+  }
+  
   // Initialize
   await loadSettings();
   await loadTopics();
@@ -76,12 +120,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const pageData = await getPageDataSafely(tab);
     
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageData' });
+    urlInput.value = pageData.url;
+    titleInput.value = pageData.title;
+    descriptionInput.value = pageData.description;
     
-    urlInput.value = response.url;
-    titleInput.value = response.title;
-    descriptionInput.value = response.description;
+    if (!pageData.content) {
+      showStatus('Page content not available - saved with basic info', false);
+    }
   } catch (error) {
     console.error('Error getting page data:', error);
     showStatus('Error loading page data', true);
@@ -117,13 +164,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       // Get the full page data including content
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const pageData = await chrome.tabs.sendMessage(tab.id, { action: 'getPageData' });
+      const pageData = await getPageDataSafely(tab);
       
       const bookmarkData = { 
         url, 
         title, 
         description, 
-        content: pageData.content,
+        content: pageData.content || '',
         action,
         shareTo: action === 'share' ? shareTo : '',
         topic: action === 'working' ? topic : ''
