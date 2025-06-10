@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const topicSuggestions = document.getElementById('topicSuggestions');
   const autoCloseCheckbox = document.getElementById('autoClose');
   const saveBtn = document.getElementById('saveBtn');
+  const saveCloseBtn = document.getElementById('saveCloseBtn');
   const statusDiv = document.getElementById('status');
   
   function showStatus(message, isError = false) {
@@ -134,7 +135,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     showStatus('Error loading page data', true);
   }
   
-  saveBtn.addEventListener('click', async () => {
+  // Shared save function
+  async function saveBookmark(shouldCloseTab = false) {
     const url = urlInput.value.trim();
     const title = titleInput.value.trim();
     const description = descriptionInput.value.trim();
@@ -158,8 +160,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     
+    // Disable both buttons during save
     saveBtn.disabled = true;
+    saveCloseBtn.disabled = true;
+    
+    const originalSaveText = saveBtn.textContent;
+    const originalSaveCloseText = saveCloseBtn.textContent;
+    
     saveBtn.textContent = 'Saving...';
+    saveCloseBtn.textContent = 'Saving...';
     
     try {
       // Get the full page data including content
@@ -184,7 +193,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success) {
         showStatus('Bookmark saved successfully!');
         
-        if (autoCloseCheckbox.checked) {
+        // Close tab if requested OR if auto-close is enabled
+        if (shouldCloseTab || autoCloseCheckbox.checked) {
           setTimeout(async () => {
             // Close the current browser tab (where the bookmark was saved from)
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -200,7 +210,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       showStatus('Failed to save bookmark', true);
     } finally {
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Bookmark';
+      saveCloseBtn.disabled = false;
+      saveBtn.textContent = originalSaveText;
+      saveCloseBtn.textContent = originalSaveCloseText;
     }
-  });
+  }
+
+  // Event listeners for save buttons
+  saveBtn.addEventListener('click', () => saveBookmark(false));
+  saveCloseBtn.addEventListener('click', () => saveBookmark(true));
 });
