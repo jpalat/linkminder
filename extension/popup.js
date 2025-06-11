@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const topicField = document.getElementById('topicField');
   const topicInput = document.getElementById('topic');
   const topicSuggestions = document.getElementById('topicSuggestions');
-  const autoCloseCheckbox = document.getElementById('autoClose');
   const saveBtn = document.getElementById('saveBtn');
   const saveCloseBtn = document.getElementById('saveCloseBtn');
   const statusDiv = document.getElementById('status');
@@ -23,18 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 3000);
   }
   
-  // Load persisted settings
-  async function loadSettings() {
-    const result = await chrome.storage.local.get('autoClose');
-    autoCloseCheckbox.checked = result.autoClose ?? false;
-  }
-  
-  // Save settings
-  async function saveSettings() {
-    await chrome.storage.local.set({ 
-      autoClose: autoCloseCheckbox.checked 
-    });
-  }
   
   // Fetch topics from server
   async function loadTopics() {
@@ -109,12 +96,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   
   // Initialize
-  await loadSettings();
   await loadTopics();
   
   // Set up event listeners
   actionSelect.addEventListener('change', updateConditionalFields);
-  autoCloseCheckbox.addEventListener('change', saveSettings);
   
   // Initial update of conditional fields
   updateConditionalFields();
@@ -193,8 +178,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success) {
         showStatus('Bookmark saved successfully!');
         
-        // Close tab if requested OR if auto-close is enabled
-        if (shouldCloseTab || autoCloseCheckbox.checked) {
+        // Close tab if requested
+        if (shouldCloseTab) {
           setTimeout(async () => {
             // Close the current browser tab (where the bookmark was saved from)
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
