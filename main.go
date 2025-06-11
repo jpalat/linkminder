@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/csv"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type BookmarkRequest struct {
@@ -20,8 +20,51 @@ type BookmarkRequest struct {
 	Topic       string `json:"topic,omitempty"`
 }
 
+var db *sql.DB
+
+func initDatabase() error {
+	var err error
+	db, err = sql.Open("sqlite3", "bookmarks.db")
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+
+	// Test the connection
+	if err = db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	// Create the bookmarks table
+	createTableSQL := `
+	CREATE TABLE IF NOT EXISTS bookmarks (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		url TEXT NOT NULL,
+		title TEXT NOT NULL,
+		description TEXT,
+		content TEXT,
+		action TEXT,
+		shareTo TEXT,
+		topic TEXT
+	);`
+
+	if _, err = db.Exec(createTableSQL); err != nil {
+		return fmt.Errorf("failed to create bookmarks table: %v", err)
+	}
+
+	log.Printf("Database initialized successfully")
+	return nil
+}
+
 func main() {
 	log.Printf("BookMinder API starting up...")
+	
+	// Initialize database
+	if err := initDatabase(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+	
 	log.Printf("Registering HTTP handlers")
 	
 	http.HandleFunc("/bookmark", handleBookmark)
@@ -65,8 +108,8 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := writeToCSV(req); err != nil {
-		log.Printf("Failed to write bookmark to CSV: %v", err)
+	if err := saveBookmarkToDB(req); err != nil {
+		log.Printf("Failed to save bookmark to database: %v", err)
 		http.Error(w, "Failed to save bookmark", http.StatusInternalServerError)
 		return
 	}
@@ -85,9 +128,9 @@ func handleTopics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	topics, err := getTopicsFromCSV()
+	topics, err := getTopicsFromDB()
 	if err != nil {
-		log.Printf("Failed to get topics from CSV: %v", err)
+		log.Printf("Failed to get topics from database: %v", err)
 		http.Error(w, "Failed to get topics", http.StatusInternalServerError)
 		return
 	}
@@ -97,96 +140,57 @@ func handleTopics(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string][]string{"topics": topics})
 }
 
-func writeToCSV(req BookmarkRequest) error {
-	filename := "bookmarks.csv"
+func saveBookmarkToDB(req BookmarkRequest) error {
+	log.Printf("Saving bookmark to database: %s", req.URL)
 	
-	log.Printf("Opening CSV file: %s", filename)
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	insertSQL := `
+	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic)
+	VALUES (?, ?, ?, ?, ?, ?, ?)`
+	
+	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic)
 	if err != nil {
-		log.Printf("Failed to open CSV file %s: %v", filename, err)
+		log.Printf("Failed to insert bookmark: %v", err)
 		return err
 	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	stat, err := file.Stat()
+	
+	id, err := result.LastInsertId()
 	if err != nil {
-		log.Printf("Failed to stat CSV file %s: %v", filename, err)
-		return err
-	}
-
-	if stat.Size() == 0 {
-		log.Printf("Empty CSV file detected, writing header")
-		if err := writer.Write([]string{"timestamp", "url", "title", "description", "content", "action", "shareTo", "topic"}); err != nil {
-			log.Printf("Failed to write CSV header: %v", err)
-			return err
-		}
-	}
-
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	record := []string{timestamp, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic}
-	
-	log.Printf("Writing record to CSV: %v", record)
-	if err := writer.Write(record); err != nil {
-		log.Printf("Failed to write record to CSV: %v", err)
+		log.Printf("Failed to get last insert ID: %v", err)
 		return err
 	}
 	
-	log.Printf("Successfully wrote record to CSV")
+	log.Printf("Successfully saved bookmark with ID: %d", id)
 	return nil
 }
 
-func getTopicsFromCSV() ([]string, error) {
-	filename := "bookmarks.csv"
+func getTopicsFromDB() ([]string, error) {
+	log.Printf("Reading topics from database")
 	
-	log.Printf("Reading topics from CSV file: %s", filename)
-	file, err := os.Open(filename)
+	querySQL := `SELECT DISTINCT topic FROM bookmarks WHERE topic IS NOT NULL AND topic != '' ORDER BY topic`
+	
+	rows, err := db.Query(querySQL)
 	if err != nil {
-		if os.IsNotExist(err) {
-			log.Printf("CSV file %s does not exist, returning empty topics", filename)
-			return []string{}, nil
-		}
-		log.Printf("Failed to open CSV file %s: %v", filename, err)
+		log.Printf("Failed to query topics: %v", err)
 		return nil, err
 	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		log.Printf("Failed to read CSV records from %s: %v", filename, err)
-		return nil, err
-	}
-
-	log.Printf("Read %d records from CSV", len(records))
-	topicSet := make(map[string]bool)
+	defer rows.Close()
 	
-	// Skip header row if it exists
-	startIndex := 0
-	if len(records) > 0 && records[0][0] == "timestamp" {
-		log.Printf("Header row detected, skipping first record")
-		startIndex = 1
-	}
-	
-	// Extract topics from records (topic is in column 7)
-	topicsFound := 0
-	for i := startIndex; i < len(records); i++ {
-		if len(records[i]) > 7 && records[i][7] != "" {
-			topicSet[records[i][7]] = true
-			topicsFound++
+	var topics []string
+	for rows.Next() {
+		var topic string
+		if err := rows.Scan(&topic); err != nil {
+			log.Printf("Failed to scan topic: %v", err)
+			return nil, err
 		}
-	}
-	
-	log.Printf("Found %d topic entries, %d unique topics", topicsFound, len(topicSet))
-	
-	// Convert to sorted slice
-	topics := make([]string, 0, len(topicSet))
-	for topic := range topicSet {
 		topics = append(topics, topic)
 	}
 	
+	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating topics: %v", err)
+		return nil, err
+	}
+	
+	log.Printf("Found %d unique topics", len(topics))
 	log.Printf("Returning topics: %v", topics)
 	return topics, nil
 }
