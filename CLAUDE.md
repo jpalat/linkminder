@@ -82,11 +82,35 @@ CREATE TABLE bookmarks (
 
 The API includes comprehensive logging for debugging and monitoring:
 
+### Console Logging
 - **Startup logs**: Server initialization and endpoint registration
 - **Request logs**: HTTP method, endpoint, and client IP for all requests
 - **Validation logs**: Details about failed validations (missing fields, invalid JSON)
-- **CSV operation logs**: File operations, record writing, and topic extraction
+- **Database operation logs**: SQL operations, record writing, and topic extraction
 - **Success logs**: Confirmation of successful operations
 - **Error logs**: Detailed error information for troubleshooting
 
-All logs include timestamps and are written to stdout/stderr.
+### Structured Logging
+JSON-formatted logs are written to `bookminderapi.log` with the following structure:
+```json
+{
+  "timestamp": "2023-12-10T15:30:45Z",
+  "level": "INFO|WARN|ERROR",
+  "message": "Human readable message",
+  "component": "startup|api|database|system",
+  "data": {
+    "key": "value"
+  }
+}
+```
+
+**Log Levels**:
+- `INFO`: Normal operations, successful requests
+- `WARN`: Non-fatal issues like invalid HTTP methods
+- `ERROR`: Failed operations, database errors
+
+**Components**:
+- `startup`: Server initialization
+- `api`: HTTP request handling
+- `database`: SQLite operations
+- `system`: General system events
