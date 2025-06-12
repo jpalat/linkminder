@@ -13,6 +13,7 @@ BookMinder API is a simple Go HTTP server that accepts bookmark submissions via 
 - **Endpoints**: 
   - `POST /bookmark` accepts JSON with `url`, `title`, and optional fields
   - `GET /topics` returns list of available topics
+  - `GET /api/stats/summary` returns dashboard summary statistics
 - **SQLite storage**: Data is stored in `bookmarks.db` with automatic timestamps
 - **Dependencies**: Uses SQLite driver (`github.com/mattn/go-sqlite3`)
 
@@ -35,6 +36,9 @@ curl -X POST http://localhost:9090/bookmark \
 
 # Test the topics endpoint
 curl -X GET http://localhost:9090/topics
+
+# Test the stats summary endpoint
+curl -X GET http://localhost:9090/api/stats/summary
 
 # Stop server (if running in background)
 pkill -f "bookminderapi"
@@ -69,6 +73,45 @@ CREATE TABLE bookmarks (
     topic TEXT
 );
 ```
+
+## API Endpoints
+
+### Dashboard Summary Statistics
+```http
+GET /api/stats/summary
+```
+
+Returns analytics and overview data for dashboard display.
+
+**Response:**
+```json
+{
+  "needsTriage": 23,
+  "activeProjects": 4,
+  "readyToShare": 7,
+  "totalBookmarks": 347,
+  "projectStats": [
+    {
+      "topic": "React Migration",
+      "count": 15,
+      "lastUpdated": "2025-06-11T10:30:00Z",
+      "status": "active"
+    }
+  ]
+}
+```
+
+**Statistics Definitions:**
+- `needsTriage`: Bookmarks with no action or action="read-later" 
+- `activeProjects`: Count of unique topics with action="working"
+- `readyToShare`: Bookmarks with action="share"
+- `totalBookmarks`: Total number of saved bookmarks
+- `projectStats`: Top 10 working topics with counts and activity status
+
+**Project Status:**
+- `active`: Updated within last 7 days
+- `stale`: Updated 7-30 days ago  
+- `inactive`: Updated over 30 days ago
 
 ## Development Notes
 

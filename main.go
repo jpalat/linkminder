@@ -22,6 +22,21 @@ type BookmarkRequest struct {
 	Topic       string `json:"topic,omitempty"`
 }
 
+type ProjectStat struct {
+	Topic       string `json:"topic"`
+	Count       int    `json:"count"`
+	LastUpdated string `json:"lastUpdated"`
+	Status      string `json:"status"`
+}
+
+type SummaryStats struct {
+	NeedsTriage     int           `json:"needsTriage"`
+	ActiveProjects  int           `json:"activeProjects"`
+	ReadyToShare    int           `json:"readyToShare"`
+	TotalBookmarks  int           `json:"totalBookmarks"`
+	ProjectStats    []ProjectStat `json:"projectStats"`
+}
+
 var db *sql.DB
 var logFile *os.File
 
@@ -122,10 +137,12 @@ func main() {
 	
 	http.HandleFunc("/bookmark", handleBookmark)
 	http.HandleFunc("/topics", handleTopics)
+	http.HandleFunc("/api/stats/summary", handleStatsSummary)
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  POST /bookmark - Save a new bookmark")
 	log.Printf("  GET /topics - Get list of available topics")
+	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -133,7 +150,7 @@ func main() {
 	
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
 		"port": port,
-		"endpoints": []string{"/bookmark", "/topics"},
+		"endpoints": []string{"/bookmark", "/topics", "/api/stats/summary"},
 	})
 	
 	if err := http.ListenAndServe(port, nil); err != nil {
@@ -343,4 +360,161 @@ func getTopicsFromDB() ([]string, error) {
 	})
 	
 	return topics, nil
+}
+
+func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/stats/summary from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Stats summary request received", map[string]interface{}{
+		"method": r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method": r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats, err := getStatsSummary()
+	if err != nil {
+		log.Printf("Failed to get stats summary: %v", err)
+		logStructured("ERROR", "database", "Failed to get stats summary", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Failed to get stats summary", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully retrieved stats summary")
+	logStructured("INFO", "database", "Stats summary retrieved", map[string]interface{}{
+		"totalBookmarks": stats.TotalBookmarks,
+		"needsTriage": stats.NeedsTriage,
+		"activeProjects": stats.ActiveProjects,
+		"readyToShare": stats.ReadyToShare,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+func getStatsSummary() (*SummaryStats, error) {
+	logStructured("INFO", "database", "Computing stats summary", nil)
+	
+	stats := &SummaryStats{}
+	
+	// Get total bookmarks count
+	err := db.QueryRow("SELECT COUNT(*) FROM bookmarks").Scan(&stats.TotalBookmarks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count total bookmarks: %v", err)
+	}
+	
+	// Count by action categories
+	// needsTriage: bookmarks with no action or action = "read-later"
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM bookmarks 
+		WHERE action IS NULL OR action = '' OR action = 'read-later'
+	`).Scan(&stats.NeedsTriage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count needs triage: %v", err)
+	}
+	
+	// activeProjects: unique topics in "working" action
+	err = db.QueryRow(`
+		SELECT COUNT(DISTINCT topic) FROM bookmarks 
+		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+	`).Scan(&stats.ActiveProjects)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count active projects: %v", err)
+	}
+	
+	// readyToShare: bookmarks with action = "share"
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM bookmarks 
+		WHERE action = 'share'
+	`).Scan(&stats.ReadyToShare)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count ready to share: %v", err)
+	}
+	
+	// Get project stats for working topics
+	projectStats, err := getProjectStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project stats: %v", err)
+	}
+	stats.ProjectStats = projectStats
+	
+	logStructured("INFO", "database", "Stats summary computed", map[string]interface{}{
+		"totalBookmarks": stats.TotalBookmarks,
+		"needsTriage": stats.NeedsTriage,
+		"activeProjects": stats.ActiveProjects,
+		"readyToShare": stats.ReadyToShare,
+		"projectCount": len(stats.ProjectStats),
+	})
+	
+	return stats, nil
+}
+
+func getProjectStats() ([]ProjectStat, error) {
+	querySQL := `
+		SELECT 
+			topic,
+			COUNT(*) as count,
+			MAX(timestamp) as lastUpdated
+		FROM bookmarks 
+		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+		GROUP BY topic
+		ORDER BY MAX(timestamp) DESC
+		LIMIT 10
+	`
+	
+	rows, err := db.Query(querySQL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query project stats: %v", err)
+	}
+	defer rows.Close()
+	
+	var projects []ProjectStat
+	for rows.Next() {
+		var project ProjectStat
+		var lastUpdated string
+		
+		err := rows.Scan(&project.Topic, &project.Count, &lastUpdated)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan project stat: %v", err)
+		}
+		
+		// Parse timestamp and format as ISO 8601
+		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastUpdated); err == nil {
+			project.LastUpdated = timestamp.UTC().Format(time.RFC3339)
+		} else {
+			project.LastUpdated = lastUpdated
+		}
+		
+		// Determine status based on recency
+		if timestamp, err := time.Parse(time.RFC3339, project.LastUpdated); err == nil {
+			daysSince := time.Since(timestamp).Hours() / 24
+			if daysSince <= 7 {
+				project.Status = "active"
+			} else if daysSince <= 30 {
+				project.Status = "stale"
+			} else {
+				project.Status = "inactive"
+			}
+		} else {
+			project.Status = "unknown"
+		}
+		
+		projects = append(projects, project)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating project stats: %v", err)
+	}
+	
+	return projects, nil
 }
