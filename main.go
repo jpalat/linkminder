@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -35,6 +38,24 @@ type SummaryStats struct {
 	ReadyToShare    int           `json:"readyToShare"`
 	TotalBookmarks  int           `json:"totalBookmarks"`
 	ProjectStats    []ProjectStat `json:"projectStats"`
+}
+
+type TriageBookmark struct {
+	ID          int    `json:"id"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Timestamp   string `json:"timestamp"`
+	Domain      string `json:"domain"`
+	Age         string `json:"age"`
+	Suggested   string `json:"suggested"`
+}
+
+type TriageResponse struct {
+	Bookmarks []TriageBookmark `json:"bookmarks"`
+	Total     int              `json:"total"`
+	Limit     int              `json:"limit"`
+	Offset    int              `json:"offset"`
 }
 
 var db *sql.DB
@@ -138,11 +159,13 @@ func main() {
 	http.HandleFunc("/bookmark", handleBookmark)
 	http.HandleFunc("/topics", handleTopics)
 	http.HandleFunc("/api/stats/summary", handleStatsSummary)
+	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  POST /bookmark - Save a new bookmark")
 	log.Printf("  GET /topics - Get list of available topics")
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
+	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -150,7 +173,7 @@ func main() {
 	
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
 		"port": port,
-		"endpoints": []string{"/bookmark", "/topics", "/api/stats/summary"},
+		"endpoints": []string{"/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage"},
 	})
 	
 	if err := http.ListenAndServe(port, nil); err != nil {
@@ -517,4 +540,181 @@ func getProjectStats() ([]ProjectStat, error) {
 	}
 	
 	return projects, nil
+}
+
+func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/bookmarks/triage from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Triage queue request received", map[string]interface{}{
+		"method":      r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters
+	query := r.URL.Query()
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+	
+	limit := 10 // default
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+	
+	offset := 0 // default
+	if offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	triageData, err := getTriageQueue(limit, offset)
+	if err != nil {
+		log.Printf("Failed to get triage queue: %v", err)
+		logStructured("ERROR", "database", "Failed to get triage queue", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Failed to get triage queue", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully retrieved triage queue with %d bookmarks", len(triageData.Bookmarks))
+	logStructured("INFO", "database", "Triage queue retrieved", map[string]interface{}{
+		"count":  len(triageData.Bookmarks),
+		"total":  triageData.Total,
+		"limit":  triageData.Limit,
+		"offset": triageData.Offset,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(triageData)
+}
+
+func getTriageQueue(limit, offset int) (*TriageResponse, error) {
+	logStructured("INFO", "database", "Getting triage queue", map[string]interface{}{
+		"limit":  limit,
+		"offset": offset,
+	})
+
+	// First get the total count
+	var total int
+	countSQL := `
+		SELECT COUNT(*) FROM bookmarks 
+		WHERE action IS NULL OR action = '' OR action = 'read-later'
+	`
+	
+	err := db.QueryRow(countSQL).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count triage bookmarks: %v", err)
+	}
+
+	// Get the bookmarks
+	querySQL := `
+		SELECT id, url, title, description, timestamp 
+		FROM bookmarks 
+		WHERE action IS NULL OR action = '' OR action = 'read-later'
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+	
+	rows, err := db.Query(querySQL, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query triage bookmarks: %v", err)
+	}
+	defer rows.Close()
+
+	var bookmarks []TriageBookmark
+	for rows.Next() {
+		var bookmark TriageBookmark
+		var timestamp string
+		
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &bookmark.Description, &timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan triage bookmark: %v", err)
+		}
+		
+		// Parse and format timestamp
+		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
+			bookmark.Timestamp = ts.UTC().Format(time.RFC3339)
+			
+			// Calculate age
+			age := time.Since(ts)
+			if age.Hours() < 24 {
+				bookmark.Age = fmt.Sprintf("%.0fh", age.Hours())
+			} else {
+				bookmark.Age = fmt.Sprintf("%.0fd", age.Hours()/24)
+			}
+		} else if ts, err := time.Parse(time.RFC3339, timestamp); err == nil {
+			bookmark.Timestamp = timestamp
+			
+			// Calculate age for RFC3339 format
+			age := time.Since(ts)
+			if age.Hours() < 24 {
+				bookmark.Age = fmt.Sprintf("%.0fh", age.Hours())
+			} else {
+				bookmark.Age = fmt.Sprintf("%.0fd", age.Hours()/24)
+			}
+		} else {
+			bookmark.Timestamp = timestamp
+			bookmark.Age = "unknown"
+		}
+		
+		// Extract domain from URL
+		if u, err := url.Parse(bookmark.URL); err == nil {
+			bookmark.Domain = u.Hostname()
+		} else {
+			bookmark.Domain = "unknown"
+		}
+		
+		// Generate suggested action
+		bookmark.Suggested = getSuggestedAction(bookmark.Domain, bookmark.Title, bookmark.Description)
+		
+		bookmarks = append(bookmarks, bookmark)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating triage bookmarks: %v", err)
+	}
+
+	return &TriageResponse{
+		Bookmarks: bookmarks,
+		Total:     total,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+func getSuggestedAction(domain, title, description string) string {
+	// Simple heuristics for suggested actions
+	domain = strings.ToLower(domain)
+	title = strings.ToLower(title)
+	description = strings.ToLower(description)
+	
+	// Check for sharing indicators
+	if strings.Contains(domain, "github") || strings.Contains(domain, "stackoverflow") ||
+		strings.Contains(title, "tutorial") || strings.Contains(title, "guide") ||
+		strings.Contains(description, "share") || strings.Contains(description, "useful") {
+		return "share"
+	}
+	
+	// Check for working indicators
+	if strings.Contains(title, "documentation") || strings.Contains(title, "docs") ||
+		strings.Contains(title, "api") || strings.Contains(title, "reference") ||
+		strings.Contains(description, "work") || strings.Contains(description, "project") {
+		return "working"
+	}
+	
+	// Default to read-later
+	return "read-later"
 }
