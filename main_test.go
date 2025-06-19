@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -657,6 +658,539 @@ func TestBookmarkWorkflow_EndToEnd(t *testing.T) {
 		}
 		if stats.ActiveProjects == 0 {
 			t.Error("Expected at least 1 active project in stats")
+		}
+	})
+}
+
+// ============ COMPREHENSIVE PROJECTS TESTING ============
+
+// Projects Unit Tests - Reference Collections
+
+func TestGetReferenceCollections_EmptyDatabase(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		collections, err := getReferenceCollections()
+		if err != nil {
+			t.Fatalf("getReferenceCollections failed: %v", err)
+		}
+		
+		if len(collections) != 0 {
+			t.Errorf("Expected 0 reference collections in empty DB, got %d", len(collections))
+		}
+	})
+}
+
+func TestGetReferenceCollections_OnlyActiveProjects(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert only working bookmarks (should not appear in reference collections)
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		testData := []struct {
+			url, title, action, topic string
+		}{
+			{"https://example1.com", "Title 1", "working", "ActiveTopic1"},
+			{"https://example2.com", "Title 2", "working", "ActiveTopic2"},
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		collections, err := getReferenceCollections()
+		if err != nil {
+			t.Fatalf("getReferenceCollections failed: %v", err)
+		}
+		
+		if len(collections) != 0 {
+			t.Errorf("Expected 0 reference collections when all topics are active, got %d", len(collections))
+		}
+	})
+}
+
+func TestGetReferenceCollections_MixedTopics(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Mix of working topics and reference topics
+		testData := []struct {
+			url, title, action, topic string
+		}{
+			{"https://example1.com", "Working 1", "working", "ActiveTopic"},
+			{"https://example2.com", "Working 2", "working", "ActiveTopic"},
+			{"https://example3.com", "Reference 1", "read-later", "ReferenceTopic1"},
+			{"https://example4.com", "Reference 2", "share", "ReferenceTopic1"}, 
+			{"https://example5.com", "Reference 3", "", "ReferenceTopic2"}, // Empty action
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		collections, err := getReferenceCollections()
+		if err != nil {
+			t.Fatalf("getReferenceCollections failed: %v", err)
+		}
+		
+		if len(collections) != 2 {
+			t.Errorf("Expected 2 reference collections, got %d", len(collections))
+		}
+		
+		// Verify collections are sorted by count DESC
+		if len(collections) >= 2 && collections[0].LinkCount < collections[1].LinkCount {
+			t.Error("Reference collections should be sorted by link count DESC")
+		}
+	})
+}
+
+func TestGetReferenceCollections_TimestampParsing(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test various timestamp formats
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		timestamps := []string{
+			"2023-12-01 10:00:00",     // SQLite format
+			"2023-12-01T10:00:00Z",    // ISO format 
+			"invalid-timestamp",        // Invalid format
+		}
+		
+		for i, ts := range timestamps {
+			url := fmt.Sprintf("https://example%d.com", i)
+			topic := fmt.Sprintf("Topic%d", i)
+			_, err := tdb.db.Exec(insertSQL, url, "Title", "read-later", topic, ts)
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		collections, err := getReferenceCollections()
+		if err != nil {
+			t.Fatalf("getReferenceCollections failed: %v", err)
+		}
+		
+		if len(collections) != 3 {
+			t.Errorf("Expected 3 reference collections, got %d", len(collections))
+		}
+		
+		// Check that invalid timestamps are handled gracefully
+		for _, collection := range collections {
+			if collection.LastAccessed == "" {
+				t.Error("LastAccessed should not be empty")
+			}
+		}
+	})
+}
+
+// Projects Unit Tests - Active Projects
+
+func TestGetActiveProjects_EdgeCases(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Test edge cases - using current time for more reliable testing
+		now := time.Now()
+		futureDate := now.Add(24 * time.Hour).Format("2006-01-02 15:04:05")
+		oldDate := now.Add(-60 * 24 * time.Hour).Format("2006-01-02 15:04:05") // 60 days ago
+		staleDate := now.Add(-15 * 24 * time.Hour).Format("2006-01-02 15:04:05") // 15 days ago
+		
+		testCases := []struct {
+			topic     string
+			timestamp string
+			expected  string // expected status
+		}{
+			{"FutureTopic", futureDate, "active"},     // Future date
+			{"OldTopic", oldDate, "inactive"},         // Very old
+			{"RecentTopic", staleDate, "stale"},       // Recent but not active
+		}
+		
+		for i, tc := range testCases {
+			url := fmt.Sprintf("https://example%d.com", i)
+			_, err := tdb.db.Exec(insertSQL, url, "Title", "working", tc.topic, tc.timestamp)
+			if err != nil {
+				t.Fatalf("Failed to insert test data for %s: %v", tc.topic, err)
+			}
+		}
+		
+		projects, err := getActiveProjects()
+		if err != nil {
+			t.Fatalf("getActiveProjects failed: %v", err)
+		}
+		
+		if len(projects) != 3 {
+			t.Errorf("Expected 3 active projects, got %d", len(projects))
+		}
+		
+		// Verify status calculation
+		statusMap := make(map[string]string)
+		for _, project := range projects {
+			statusMap[project.Topic] = project.Status
+		}
+		
+		for _, tc := range testCases {
+			if statusMap[tc.topic] != tc.expected {
+				t.Errorf("Topic %s: expected status %s, got %s", tc.topic, tc.expected, statusMap[tc.topic])
+			}
+		}
+	})
+}
+
+func TestGetActiveProjects_ProgressCalculation(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Create topics with different link counts
+		testCases := []struct {
+			topic         string
+			linkCount     int
+			expectedProgress int
+		}{
+			{"SmallProject", 1, 10},    // 1 * 10 = 10
+			{"MediumProject", 5, 50},   // 5 * 10 = 50  
+			{"LargeProject", 15, 100},  // 15 * 10 = 150, capped at 100
+		}
+		
+		for _, tc := range testCases {
+			for i := 0; i < tc.linkCount; i++ {
+				url := fmt.Sprintf("https://%s-link%d.com", tc.topic, i)
+				_, err := tdb.db.Exec(insertSQL, url, "Title", "working", tc.topic, "2023-12-01 10:00:00")
+				if err != nil {
+					t.Fatalf("Failed to insert link %d for %s: %v", i, tc.topic, err)
+				}
+			}
+		}
+		
+		projects, err := getActiveProjects()
+		if err != nil {
+			t.Fatalf("getActiveProjects failed: %v", err)
+		}
+		
+		progressMap := make(map[string]int)
+		for _, project := range projects {
+			progressMap[project.Topic] = project.Progress
+		}
+		
+		for _, tc := range testCases {
+			if progressMap[tc.topic] != tc.expectedProgress {
+				t.Errorf("Topic %s: expected progress %d, got %d", tc.topic, tc.expectedProgress, progressMap[tc.topic])
+			}
+		}
+	})
+}
+
+func TestGetActiveProjects_EmptyAndNullTopics(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Test handling of empty/null topics
+		testData := []struct {
+			url   string
+			topic interface{} // Can be string or nil
+		}{
+			{"https://valid.com", "ValidTopic"},
+			{"https://empty.com", ""},      // Empty string
+			{"https://null.com", nil},      // NULL
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, "Title", "working", data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		projects, err := getActiveProjects()
+		if err != nil {
+			t.Fatalf("getActiveProjects failed: %v", err)
+		}
+		
+		// Only valid topic should be returned
+		if len(projects) != 1 {
+			t.Errorf("Expected 1 project with valid topic, got %d", len(projects))
+		}
+		
+		if len(projects) > 0 && projects[0].Topic != "ValidTopic" {
+			t.Errorf("Expected topic 'ValidTopic', got %s", projects[0].Topic)
+		}
+	})
+}
+
+func TestGetActiveProjects_SortingOrder(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Create projects with different timestamps
+		testData := []struct {
+			topic     string
+			timestamp string
+		}{
+			{"OldestProject", "2023-11-01 10:00:00"},
+			{"MiddleProject", "2023-11-15 10:00:00"},
+			{"NewestProject", "2023-12-01 10:00:00"},
+		}
+		
+		for i, data := range testData {
+			url := fmt.Sprintf("https://example%d.com", i)
+			_, err := tdb.db.Exec(insertSQL, url, "Title", "working", data.topic, data.timestamp)
+			if err != nil {
+				t.Fatalf("Failed to insert test data for %s: %v", data.topic, err)
+			}
+		}
+		
+		projects, err := getActiveProjects()
+		if err != nil {
+			t.Fatalf("getActiveProjects failed: %v", err)
+		}
+		
+		if len(projects) != 3 {
+			t.Fatalf("Expected 3 projects, got %d", len(projects))
+		}
+		
+		// Should be sorted by timestamp DESC (newest first)
+		expectedOrder := []string{"NewestProject", "MiddleProject", "OldestProject"}
+		for i, expected := range expectedOrder {
+			if projects[i].Topic != expected {
+				t.Errorf("Position %d: expected %s, got %s", i, expected, projects[i].Topic)
+			}
+		}
+	})
+}
+
+func TestProjects_TopicCaseHandling(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Test case sensitivity and special characters
+		topics := []string{
+			"JavaScript",
+			"javascript", 
+			"Java-Script",
+			"Java_Script",
+			"Java Script",
+			"JAVASCRIPT",
+		}
+		
+		for i, topic := range topics {
+			url := fmt.Sprintf("https://example%d.com", i)
+			_, err := tdb.db.Exec(insertSQL, url, "Title", "working", topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data for topic %s: %v", topic, err)
+			}
+		}
+		
+		projects, err := getActiveProjects()
+		if err != nil {
+			t.Fatalf("getActiveProjects failed: %v", err)
+		}
+		
+		// Each topic should be treated as separate
+		if len(projects) != len(topics) {
+			t.Errorf("Expected %d distinct topics, got %d", len(topics), len(projects))
+		}
+		
+		// Verify all topics are present
+		foundTopics := make(map[string]bool)
+		for _, project := range projects {
+			foundTopics[project.Topic] = true
+		}
+		
+		for _, expectedTopic := range topics {
+			if !foundTopics[expectedTopic] {
+				t.Errorf("Topic %s not found in results", expectedTopic)
+			}
+		}
+	})
+}
+
+// Projects HTTP Handler Tests
+
+func TestHandleProjects_InvalidMethods(t *testing.T) {
+	methods := []string{"POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+	
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/api/projects", nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjects(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Method %s: expected status %d, got %d", method, http.StatusMethodNotAllowed, rr.Code)
+			}
+		})
+	}
+}
+
+func TestHandleProjects_Headers(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		req := httptest.NewRequest("GET", "/api/projects", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjects(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		contentType := rr.Header().Get("Content-Type")
+		if contentType != "application/json" {
+			t.Errorf("Expected Content-Type 'application/json', got %s", contentType)
+		}
+		
+		// Verify it's valid JSON
+		var response ProjectsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Errorf("Response is not valid JSON: %v", err)
+		}
+	})
+}
+
+// Projects Integration Tests
+
+func TestProjects_ResponseStructure(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert comprehensive test data
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		testData := []struct {
+			url, title, action, topic string
+		}{
+			{"https://active1.com", "Active 1", "working", "ActiveTopic1"},
+			{"https://active2.com", "Active 2", "working", "ActiveTopic2"}, 
+			{"https://ref1.com", "Ref 1", "read-later", "RefTopic1"},
+			{"https://ref2.com", "Ref 2", "share", "RefTopic2"},
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		req := httptest.NewRequest("GET", "/api/projects", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjects(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		var response ProjectsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		// Validate response structure
+		if len(response.ActiveProjects) != 2 {
+			t.Errorf("Expected 2 active projects, got %d", len(response.ActiveProjects))
+		}
+		
+		if len(response.ReferenceCollections) != 2 {
+			t.Errorf("Expected 2 reference collections, got %d", len(response.ReferenceCollections))
+		}
+		
+		// Validate active project fields
+		for _, project := range response.ActiveProjects {
+			if project.Topic == "" {
+				t.Error("Active project topic should not be empty")
+			}
+			if project.LinkCount <= 0 {
+				t.Error("Active project link count should be > 0")
+			}
+			if project.LastUpdated == "" {
+				t.Error("Active project lastUpdated should not be empty")
+			}
+			if project.Status == "" {
+				t.Error("Active project status should not be empty")
+			}
+			if project.Progress < 0 || project.Progress > 100 {
+				t.Errorf("Active project progress should be 0-100, got %d", project.Progress)
+			}
+		}
+		
+		// Validate reference collection fields
+		for _, collection := range response.ReferenceCollections {
+			if collection.Topic == "" {
+				t.Error("Reference collection topic should not be empty")
+			}
+			if collection.LinkCount <= 0 {
+				t.Error("Reference collection link count should be > 0")
+			}
+			if collection.LastAccessed == "" {
+				t.Error("Reference collection lastAccessed should not be empty")
+			}
+		}
+	})
+}
+
+func TestProjectsWorkflow_EndToEnd(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// 1. Start with empty database
+		req := httptest.NewRequest("GET", "/api/projects", nil)
+		rr := httptest.NewRecorder()
+		handleProjects(rr, req)
+		
+		var emptyResponse ProjectsResponse
+		json.Unmarshal(rr.Body.Bytes(), &emptyResponse)
+		
+		if len(emptyResponse.ActiveProjects) != 0 || len(emptyResponse.ReferenceCollections) != 0 {
+			t.Error("Expected empty projects in new database")
+		}
+		
+		// 2. Add bookmarks and verify they appear as projects
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Add working project
+		_, err := tdb.db.Exec(insertSQL, "https://work.com", "Work Item", "working", "WorkProject", "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert working bookmark: %v", err)
+		}
+		
+		// Add reference bookmark
+		_, err = tdb.db.Exec(insertSQL, "https://ref.com", "Reference Item", "read-later", "RefProject", "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert reference bookmark: %v", err)
+		}
+		
+		// 3. Verify projects appear correctly
+		req = httptest.NewRequest("GET", "/api/projects", nil)
+		rr = httptest.NewRecorder()
+		handleProjects(rr, req)
+		
+		var finalResponse ProjectsResponse
+		json.Unmarshal(rr.Body.Bytes(), &finalResponse)
+		
+		if len(finalResponse.ActiveProjects) != 1 {
+			t.Errorf("Expected 1 active project, got %d", len(finalResponse.ActiveProjects))
+		}
+		
+		if len(finalResponse.ReferenceCollections) != 1 {
+			t.Errorf("Expected 1 reference collection, got %d", len(finalResponse.ReferenceCollections))
+		}
+		
+		// 4. Verify project details
+		activeProject := finalResponse.ActiveProjects[0]
+		if activeProject.Topic != "WorkProject" {
+			t.Errorf("Expected active project 'WorkProject', got %s", activeProject.Topic)
+		}
+		if activeProject.LinkCount != 1 {
+			t.Errorf("Expected link count 1, got %d", activeProject.LinkCount)
+		}
+		if activeProject.Progress != 10 {
+			t.Errorf("Expected progress 10, got %d", activeProject.Progress)
+		}
+		
+		refCollection := finalResponse.ReferenceCollections[0]
+		if refCollection.Topic != "RefProject" {
+			t.Errorf("Expected reference collection 'RefProject', got %s", refCollection.Topic)
+		}
+		if refCollection.LinkCount != 1 {
+			t.Errorf("Expected reference link count 1, got %d", refCollection.LinkCount)
 		}
 	})
 }
