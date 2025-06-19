@@ -14,6 +14,7 @@ BookMinder API is a simple Go HTTP server that accepts bookmark submissions via 
   - `POST /bookmark` accepts JSON with `url`, `title`, and optional fields
   - `GET /topics` returns list of available topics
   - `GET /api/stats/summary` returns dashboard summary statistics
+  - `GET /api/projects/{topic}` returns detailed view of a specific project
 - **SQLite storage**: Data is stored in `bookmarks.db` with automatic timestamps
 - **Dependencies**: Uses SQLite driver (`github.com/mattn/go-sqlite3`)
 
@@ -29,16 +30,17 @@ go run main.go
 # Build executable
 go build -o bookminderapi main.go
 
-# Test the bookmark endpoint
-curl -X POST http://localhost:9090/bookmark \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","title":"Example Site","description":"Test bookmark","action":"read-later"}'
+# Run unit tests
+go test
 
-# Test the topics endpoint
-curl -X GET http://localhost:9090/topics
+# Run tests with verbose output
+go test -v
 
-# Test the stats summary endpoint
-curl -X GET http://localhost:9090/api/stats/summary
+# Run specific test
+go test -run TestBookmarkWorkflow_EndToEnd -v
+
+# Run all project-related tests
+go test -run "Projects" -v
 
 # Stop server (if running in background)
 pkill -f "bookminderapi"
@@ -83,7 +85,38 @@ GET /api/stats/summary
 
 Returns analytics and overview data for dashboard display.
 
+### Project Detail View
+```http
+GET /api/projects/{topic}
+```
+
+Returns detailed information about a specific project including all bookmarks within that topic. The topic parameter should be URL-encoded if it contains special characters.
+
 **Response:**
+```json
+{
+  "topic": "Energy",
+  "linkCount": 3,
+  "lastUpdated": "2025-06-16T19:37:02Z",
+  "status": "active",
+  "progress": 30,
+  "bookmarks": [
+    {
+      "id": 12,
+      "url": "https://example.com",
+      "title": "Example Bookmark",
+      "description": "Description text",
+      "content": "Full content text",
+      "timestamp": "2025-06-16T19:37:02Z",
+      "domain": "example.com",
+      "age": "2d",
+      "action": "working"
+    }
+  ]
+}
+```
+
+**Summary Response:**
 ```json
 {
   "needsTriage": 23,
@@ -121,6 +154,23 @@ Returns analytics and overview data for dashboard display.
 - Database includes auto-incrementing IDs and automatic timestamps
 - Topics are extracted dynamically from existing bookmark data
 
+## Testing
+
+The API includes comprehensive unit tests covering:
+
+- **Database operations**: Bookmark saving, topic extraction, stats calculation
+- **HTTP handlers**: All endpoint functionality with proper error handling  
+- **API responses**: JSON structure validation and field verification
+- **Edge cases**: Invalid inputs, empty databases, timestamp parsing
+- **Integration tests**: End-to-end workflow validation
+
+### Test Coverage
+- `main_test.go` contains 30+ test functions
+- Database functions tested with temporary SQLite databases
+- HTTP handlers tested with `httptest` package
+- Both success and error scenarios covered
+- Project functionality comprehensively tested
+
 ## Logging
 
 The API includes comprehensive logging for debugging and monitoring:
@@ -157,3 +207,8 @@ JSON-formatted logs are written to `bookminderapi.log` with the following struct
 - `api`: HTTP request handling
 - `database`: SQLite operations
 - `system`: General system events
+
+## Development Best Practices
+
+- **Testing**:
+  - Prefer test scripts to curl tests
