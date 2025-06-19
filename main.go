@@ -58,6 +58,25 @@ type TriageResponse struct {
 	Offset    int              `json:"offset"`
 }
 
+type ActiveProject struct {
+	Topic       string `json:"topic"`
+	LinkCount   int    `json:"linkCount"`
+	LastUpdated string `json:"lastUpdated"`
+	Status      string `json:"status"`
+	Progress    int    `json:"progress"`
+}
+
+type ReferenceCollection struct {
+	Topic        string `json:"topic"`
+	LinkCount    int    `json:"linkCount"`
+	LastAccessed string `json:"lastAccessed"`
+}
+
+type ProjectsResponse struct {
+	ActiveProjects       []ActiveProject       `json:"activeProjects"`
+	ReferenceCollections []ReferenceCollection `json:"referenceCollections"`
+}
+
 var db *sql.DB
 var logFile *os.File
 
@@ -156,16 +175,20 @@ func main() {
 	log.Printf("Registering HTTP handlers")
 	logStructured("INFO", "startup", "Registering HTTP handlers", nil)
 	
+	http.HandleFunc("/", handleDashboard)
 	http.HandleFunc("/bookmark", handleBookmark)
 	http.HandleFunc("/topics", handleTopics)
 	http.HandleFunc("/api/stats/summary", handleStatsSummary)
 	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
+	http.HandleFunc("/api/projects", handleProjects)
 	
 	log.Printf("Available endpoints:")
+	log.Printf("  GET / - Dashboard interface")
 	log.Printf("  POST /bookmark - Save a new bookmark")
 	log.Printf("  GET /topics - Get list of available topics")
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
+	log.Printf("  GET /api/projects - Get active projects and reference collections")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -173,7 +196,7 @@ func main() {
 	
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
 		"port": port,
-		"endpoints": []string{"/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage"},
+		"endpoints": []string{"/", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects"},
 	})
 	
 	if err := http.ListenAndServe(port, nil); err != nil {
@@ -183,6 +206,42 @@ func main() {
 		})
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+func handleDashboard(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to / from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Dashboard request received", map[string]interface{}{
+		"method": r.Method,
+		"remote_addr": r.RemoteAddr,
+		"user_agent": r.UserAgent(),
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method": r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Read the dashboard HTML file
+	dashboardHTML, err := os.ReadFile("dashboard.html")
+	if err != nil {
+		log.Printf("Failed to read dashboard.html: %v", err)
+		logStructured("ERROR", "api", "Failed to read dashboard file", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Dashboard not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(dashboardHTML)
+	
+	logStructured("INFO", "api", "Dashboard served successfully", nil)
 }
 
 func handleBookmark(w http.ResponseWriter, r *http.Request) {
@@ -717,4 +776,182 @@ func getSuggestedAction(domain, title, description string) string {
 	
 	// Default to read-later
 	return "read-later"
+}
+
+func handleProjects(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/projects from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Projects request received", map[string]interface{}{
+		"method":      r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	projects, err := getProjects()
+	if err != nil {
+		log.Printf("Failed to get projects: %v", err)
+		logStructured("ERROR", "database", "Failed to get projects", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Failed to get projects", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully retrieved projects")
+	logStructured("INFO", "database", "Projects retrieved", map[string]interface{}{
+		"activeProjects":       len(projects.ActiveProjects),
+		"referenceCollections": len(projects.ReferenceCollections),
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
+}
+
+func getProjects() (*ProjectsResponse, error) {
+	logStructured("INFO", "database", "Getting projects data", nil)
+	
+	response := &ProjectsResponse{
+		ActiveProjects:       []ActiveProject{},
+		ReferenceCollections: []ReferenceCollection{},
+	}
+
+	// Get active projects (topics with action = 'working')
+	activeProjects, err := getActiveProjects()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active projects: %v", err)
+	}
+	response.ActiveProjects = activeProjects
+
+	// Get reference collections (topics that are frequently accessed but not actively worked on)
+	referenceCollections, err := getReferenceCollections()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get reference collections: %v", err)
+	}
+	response.ReferenceCollections = referenceCollections
+
+	return response, nil
+}
+
+func getActiveProjects() ([]ActiveProject, error) {
+	querySQL := `
+		SELECT 
+			topic,
+			COUNT(*) as linkCount,
+			MAX(timestamp) as lastUpdated
+		FROM bookmarks 
+		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+		GROUP BY topic
+		ORDER BY MAX(timestamp) DESC
+	`
+	
+	rows, err := db.Query(querySQL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active projects: %v", err)
+	}
+	defer rows.Close()
+
+	var projects []ActiveProject
+	for rows.Next() {
+		var project ActiveProject
+		var lastUpdated string
+		
+		err := rows.Scan(&project.Topic, &project.LinkCount, &lastUpdated)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan active project: %v", err)
+		}
+		
+		// Parse timestamp and format as ISO 8601
+		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastUpdated); err == nil {
+			project.LastUpdated = timestamp.UTC().Format(time.RFC3339)
+		} else {
+			project.LastUpdated = lastUpdated
+		}
+		
+		// Determine status based on recency and calculate progress
+		if timestamp, err := time.Parse(time.RFC3339, project.LastUpdated); err == nil {
+			daysSince := time.Since(timestamp).Hours() / 24
+			if daysSince <= 7 {
+				project.Status = "active"
+			} else if daysSince <= 30 {
+				project.Status = "stale"
+			} else {
+				project.Status = "inactive"
+			}
+		} else {
+			project.Status = "unknown"
+		}
+		
+		// Calculate progress based on link count (rough heuristic)
+		// More links = more progress, capped at 100%
+		project.Progress = min(project.LinkCount*10, 100)
+		
+		projects = append(projects, project)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating active projects: %v", err)
+	}
+
+	return projects, nil
+}
+
+func getReferenceCollections() ([]ReferenceCollection, error) {
+	// Get topics that have bookmarks but aren't actively being worked on
+	// These could be documentation, resources, etc.
+	querySQL := `
+		SELECT 
+			topic,
+			COUNT(*) as linkCount,
+			MAX(timestamp) as lastAccessed
+		FROM bookmarks 
+		WHERE topic IS NOT NULL AND topic != '' 
+		AND topic NOT IN (
+			SELECT DISTINCT topic FROM bookmarks 
+			WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+		)
+		GROUP BY topic
+		ORDER BY COUNT(*) DESC, MAX(timestamp) DESC
+		LIMIT 10
+	`
+	
+	rows, err := db.Query(querySQL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query reference collections: %v", err)
+	}
+	defer rows.Close()
+
+	var collections []ReferenceCollection
+	for rows.Next() {
+		var collection ReferenceCollection
+		var lastAccessed string
+		
+		err := rows.Scan(&collection.Topic, &collection.LinkCount, &lastAccessed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan reference collection: %v", err)
+		}
+		
+		// Parse timestamp and format as ISO 8601
+		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastAccessed); err == nil {
+			collection.LastAccessed = timestamp.UTC().Format(time.RFC3339)
+		} else {
+			collection.LastAccessed = lastAccessed
+		}
+		
+		collections = append(collections, collection)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating reference collections: %v", err)
+	}
+
+	return collections, nil
 }
