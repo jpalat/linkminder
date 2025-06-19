@@ -216,6 +216,10 @@ func TestGetStatsSummary(t *testing.T) {
 			t.Errorf("Expected 1 bookmark ready to share, got %d", stats.ReadyToShare)
 		}
 		
+		if stats.Archived != 0 {
+			t.Errorf("Expected 0 archived bookmarks, got %d", stats.Archived)
+		}
+		
 		if len(stats.ProjectStats) == 0 {
 			t.Error("Expected project stats, got none")
 		}
@@ -1184,6 +1188,202 @@ func TestProjectsWorkflow_EndToEnd(t *testing.T) {
 		}
 		if refCollection.LinkCount != 1 {
 			t.Errorf("Expected reference link count 1, got %d", refCollection.LinkCount)
+		}
+	})
+}
+
+// Test end states functionality
+func TestEndStates(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		// Insert bookmarks with different end states
+		testData := []struct {
+			url, title, action, topic string
+		}{
+			{"https://archived1.com", "Archived Item 1", "archived", "TestProject"},
+			{"https://archived2.com", "Archived Item 2", "archived", ""},
+			{"https://irrelevant.com", "Irrelevant Item", "irrelevant", ""},
+			{"https://active.com", "Active Item", "working", "TestProject"},
+			{"https://share.com", "Share Item", "share", ""},
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		// Test stats calculation includes archived count
+		stats, err := getStatsSummary()
+		if err != nil {
+			t.Fatalf("getStatsSummary failed: %v", err)
+		}
+		
+		if stats.Archived != 2 {
+			t.Errorf("Expected 2 archived bookmarks, got %d", stats.Archived)
+		}
+		
+		if stats.TotalBookmarks != 5 {
+			t.Errorf("Expected 5 total bookmarks, got %d", stats.TotalBookmarks)
+		}
+		
+		if stats.ActiveProjects != 1 {
+			t.Errorf("Expected 1 active project, got %d", stats.ActiveProjects)
+		}
+		
+		if stats.ReadyToShare != 1 {
+			t.Errorf("Expected 1 ready to share, got %d", stats.ReadyToShare)
+		}
+		
+		// Test API response includes archived field
+		req := httptest.NewRequest("GET", "/api/stats/summary", nil)
+		rr := httptest.NewRecorder()
+		handleStatsSummary(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		var apiStats SummaryStats
+		if err := json.Unmarshal(rr.Body.Bytes(), &apiStats); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if apiStats.Archived != 2 {
+			t.Errorf("API response: expected 2 archived bookmarks, got %d", apiStats.Archived)
+		}
+	})
+}
+
+// Test bookmark update functionality
+func TestBookmarkUpdate(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert a test bookmark
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		result, err := tdb.db.Exec(insertSQL, "https://test.com", "Test Item", "read-later", "", "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarkID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+		
+		// Test updating bookmark to archived
+		updateReq := BookmarkUpdateRequest{
+			Action: "archived",
+		}
+		
+		jsonBody, err := json.Marshal(updateReq)
+		if err != nil {
+			t.Fatalf("Failed to marshal update request: %v", err)
+		}
+		
+		req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+		
+		var response map[string]string
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if response["status"] != "success" {
+			t.Errorf("Expected status 'success', got %s", response["status"])
+		}
+		
+		// Verify bookmark was actually updated in database
+		var action string
+		err = tdb.db.QueryRow("SELECT action FROM bookmarks WHERE id = ?", bookmarkID).Scan(&action)
+		if err != nil {
+			t.Fatalf("Failed to query updated bookmark: %v", err)
+		}
+		
+		if action != "archived" {
+			t.Errorf("Expected action 'archived', got %s", action)
+		}
+		
+		// Test updating with topic
+		updateReq = BookmarkUpdateRequest{
+			Action: "working",
+			Topic:  "TestProject",
+		}
+		
+		jsonBody, _ = json.Marshal(updateReq)
+		req = httptest.NewRequest("PATCH", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewReader(jsonBody))
+		req.Header.Set("Content-Type", "application/json")
+		rr = httptest.NewRecorder()
+		
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		// Verify topic was updated
+		var updatedAction, updatedTopic string
+		err = tdb.db.QueryRow("SELECT action, topic FROM bookmarks WHERE id = ?", bookmarkID).Scan(&updatedAction, &updatedTopic)
+		if err != nil {
+			t.Fatalf("Failed to query updated bookmark: %v", err)
+		}
+		
+		if updatedAction != "working" {
+			t.Errorf("Expected action 'working', got %s", updatedAction)
+		}
+		
+		if updatedTopic != "TestProject" {
+			t.Errorf("Expected topic 'TestProject', got %s", updatedTopic)
+		}
+	})
+}
+
+// Test bookmark update error cases
+func TestBookmarkUpdate_ErrorCases(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test invalid method
+		req := httptest.NewRequest("GET", "/api/bookmarks/1", nil)
+		rr := httptest.NewRecorder()
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status %d, got %d", http.StatusMethodNotAllowed, rr.Code)
+		}
+		
+		// Test missing ID
+		req = httptest.NewRequest("PATCH", "/api/bookmarks/", nil)
+		rr = httptest.NewRecorder()
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d", http.StatusBadRequest, rr.Code)
+		}
+		
+		// Test invalid ID
+		req = httptest.NewRequest("PATCH", "/api/bookmarks/invalid", nil)
+		rr = httptest.NewRecorder()
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d", http.StatusBadRequest, rr.Code)
+		}
+		
+		// Test invalid JSON
+		req = httptest.NewRequest("PATCH", "/api/bookmarks/1", strings.NewReader("invalid json"))
+		req.Header.Set("Content-Type", "application/json")
+		rr = httptest.NewRecorder()
+		handleBookmarkUpdate(rr, req)
+		
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d", http.StatusBadRequest, rr.Code)
 		}
 	})
 }

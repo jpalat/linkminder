@@ -55,7 +55,7 @@ The API accepts JSON requests with this structure:
   "title": "required string", 
   "description": "optional string",
   "content": "optional string",
-  "action": "optional string (read-later, share, working)",
+  "action": "optional string (read-later, working, share, archived, irrelevant)",
   "shareTo": "optional string (for share action)",
   "topic": "optional string (for working action)"
 }
@@ -138,8 +138,16 @@ Returns detailed information about a specific project including all bookmarks wi
 - `needsTriage`: Bookmarks with no action or action="read-later" 
 - `activeProjects`: Count of unique topics with action="working"
 - `readyToShare`: Bookmarks with action="share"
+- `archived`: Bookmarks with action="archived" (completed/done)
 - `totalBookmarks`: Total number of saved bookmarks
 - `projectStats`: Top 10 working topics with counts and activity status
+
+**Bookmark Lifecycle:**
+- `read-later` or empty → Needs triage and user decision
+- `working` → Actively being used for a project (requires topic)
+- `share` → Ready to be shared with others
+- `archived` → Completed/finished, no longer active
+- `irrelevant` → Determined to be not useful
 
 **Project Status:**
 - `active`: Updated within last 7 days

@@ -25,6 +25,12 @@ type BookmarkRequest struct {
 	Topic       string `json:"topic,omitempty"`
 }
 
+type BookmarkUpdateRequest struct {
+	Action  string `json:"action,omitempty"`
+	ShareTo string `json:"shareTo,omitempty"`
+	Topic   string `json:"topic,omitempty"`
+}
+
 type ProjectStat struct {
 	Topic       string `json:"topic"`
 	Count       int    `json:"count"`
@@ -36,6 +42,7 @@ type SummaryStats struct {
 	NeedsTriage     int           `json:"needsTriage"`
 	ActiveProjects  int           `json:"activeProjects"`
 	ReadyToShare    int           `json:"readyToShare"`
+	Archived        int           `json:"archived"`
 	TotalBookmarks  int           `json:"totalBookmarks"`
 	ProjectStats    []ProjectStat `json:"projectStats"`
 }
@@ -201,6 +208,7 @@ func main() {
 	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
 	http.HandleFunc("/api/projects", handleProjects)
 	http.HandleFunc("/api/projects/", handleProjectDetail)
+	http.HandleFunc("/api/bookmarks/", handleBookmarkUpdate)
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
@@ -210,6 +218,7 @@ func main() {
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
 	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
+	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -217,7 +226,7 @@ func main() {
 	
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
 		"port": port,
-		"endpoints": []string{"/", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects", "/api/projects/{topic}"},
+		"endpoints": []string{"/", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects", "/api/projects/{topic}", "/api/bookmarks/{id}"},
 	})
 	
 	if err := http.ListenAndServe(port, nil); err != nil {
@@ -499,6 +508,7 @@ func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 		"needsTriage": stats.NeedsTriage,
 		"activeProjects": stats.ActiveProjects,
 		"readyToShare": stats.ReadyToShare,
+		"archived": stats.Archived,
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
@@ -544,6 +554,15 @@ func getStatsSummary() (*SummaryStats, error) {
 		return nil, fmt.Errorf("failed to count ready to share: %v", err)
 	}
 	
+	// archived: bookmarks with action = "archived"
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM bookmarks 
+		WHERE action = 'archived'
+	`).Scan(&stats.Archived)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count archived: %v", err)
+	}
+	
 	// Get project stats for working topics
 	projectStats, err := getProjectStats()
 	if err != nil {
@@ -556,6 +575,7 @@ func getStatsSummary() (*SummaryStats, error) {
 		"needsTriage": stats.NeedsTriage,
 		"activeProjects": stats.ActiveProjects,
 		"readyToShare": stats.ReadyToShare,
+		"archived": stats.Archived,
 		"projectCount": len(stats.ProjectStats),
 	})
 	
@@ -1214,4 +1234,131 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 	}
 
 	return bookmarks, nil
+}
+
+func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Bookmark update request received", map[string]interface{}{
+		"method":      r.Method,
+		"path":        r.URL.Path,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodPatch {
+		log.Printf("Method not allowed: %s (expected PATCH)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "PATCH",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract bookmark ID from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/bookmarks/")
+	if path == "" {
+		log.Printf("Bookmark ID not provided in URL path")
+		logStructured("WARN", "api", "Bookmark ID not provided", map[string]interface{}{
+			"path": r.URL.Path,
+		})
+		http.Error(w, "Bookmark ID is required", http.StatusBadRequest)
+		return
+	}
+
+	bookmarkID, err := strconv.Atoi(path)
+	if err != nil {
+		log.Printf("Invalid bookmark ID: %s", path)
+		logStructured("ERROR", "api", "Invalid bookmark ID", map[string]interface{}{
+			"error": err.Error(),
+			"id":    path,
+		})
+		http.Error(w, "Invalid bookmark ID", http.StatusBadRequest)
+		return
+	}
+
+	var req BookmarkUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode JSON request: %v", err)
+		logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s", 
+		bookmarkID, req.Action, req.Topic)
+
+	logStructured("INFO", "api", "Bookmark update request parsed", map[string]interface{}{
+		"id":     bookmarkID,
+		"action": req.Action,
+		"topic":  req.Topic,
+	})
+
+	if err := updateBookmarkInDB(bookmarkID, req); err != nil {
+		log.Printf("Failed to update bookmark in database: %v", err)
+		logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
+			"error": err.Error(),
+			"id":    bookmarkID,
+		})
+		http.Error(w, "Failed to update bookmark", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully updated bookmark: %d", bookmarkID)
+	logStructured("INFO", "database", "Bookmark updated successfully", map[string]interface{}{
+		"id":     bookmarkID,
+		"action": req.Action,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
+	log.Printf("Updating bookmark in database: %d", id)
+	
+	logStructured("INFO", "database", "Updating bookmark", map[string]interface{}{
+		"id":     id,
+		"action": req.Action,
+		"topic":  req.Topic,
+	})
+	
+	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ? WHERE id = ?`
+	
+	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, req.Topic, id)
+	if err != nil {
+		log.Printf("Failed to update bookmark: %v", err)
+		logStructured("ERROR", "database", "Update failed", map[string]interface{}{
+			"error": err.Error(),
+			"id":    id,
+		})
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Failed to get rows affected: %v", err)
+		logStructured("WARN", "database", "Failed to get rows affected", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		log.Printf("No bookmark found with ID: %d", id)
+		logStructured("WARN", "database", "No bookmark found", map[string]interface{}{
+			"id": id,
+		})
+		return fmt.Errorf("bookmark not found")
+	}
+	
+	log.Printf("Successfully updated bookmark with ID: %d", id)
+	logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
+		"id":           id,
+		"rowsAffected": rowsAffected,
+	})
+	
+	return nil
 }
