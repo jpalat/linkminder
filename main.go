@@ -63,7 +63,6 @@ type ActiveProject struct {
 	LinkCount   int    `json:"linkCount"`
 	LastUpdated string `json:"lastUpdated"`
 	Status      string `json:"status"`
-	Progress    int    `json:"progress"`
 }
 
 type ReferenceCollection struct {
@@ -75,6 +74,26 @@ type ReferenceCollection struct {
 type ProjectsResponse struct {
 	ActiveProjects       []ActiveProject       `json:"activeProjects"`
 	ReferenceCollections []ReferenceCollection `json:"referenceCollections"`
+}
+
+type ProjectBookmark struct {
+	ID          int    `json:"id"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+	Timestamp   string `json:"timestamp"`
+	Domain      string `json:"domain"`
+	Age         string `json:"age"`
+	Action      string `json:"action"`
+}
+
+type ProjectDetailResponse struct {
+	Topic       string            `json:"topic"`
+	LinkCount   int               `json:"linkCount"`
+	LastUpdated string            `json:"lastUpdated"`
+	Status      string            `json:"status"`
+	Bookmarks   []ProjectBookmark `json:"bookmarks"`
 }
 
 var db *sql.DB
@@ -181,6 +200,7 @@ func main() {
 	http.HandleFunc("/api/stats/summary", handleStatsSummary)
 	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
 	http.HandleFunc("/api/projects", handleProjects)
+	http.HandleFunc("/api/projects/", handleProjectDetail)
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
@@ -189,6 +209,7 @@ func main() {
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
+	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -196,7 +217,7 @@ func main() {
 	
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
 		"port": port,
-		"endpoints": []string{"/", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects"},
+		"endpoints": []string{"/", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects", "/api/projects/{topic}"},
 	})
 	
 	if err := http.ListenAndServe(port, nil); err != nil {
@@ -890,9 +911,6 @@ func getActiveProjects() ([]ActiveProject, error) {
 			project.Status = "unknown"
 		}
 		
-		// Calculate progress based on link count (rough heuristic)
-		// More links = more progress, capped at 100%
-		project.Progress = min(project.LinkCount*10, 100)
 		
 		projects = append(projects, project)
 	}
@@ -954,4 +972,246 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 	}
 
 	return collections, nil
+}
+
+func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Project detail request received", map[string]interface{}{
+		"method":      r.Method,
+		"path":        r.URL.Path,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract topic from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
+	if path == "" {
+		log.Printf("Topic not provided in URL path")
+		logStructured("WARN", "api", "Topic not provided", map[string]interface{}{
+			"path": r.URL.Path,
+		})
+		http.Error(w, "Topic is required", http.StatusBadRequest)
+		return
+	}
+
+	// URL decode the topic
+	topic, err := url.QueryUnescape(path)
+	if err != nil {
+		log.Printf("Failed to decode topic from URL: %v", err)
+		logStructured("ERROR", "api", "Failed to decode topic", map[string]interface{}{
+			"error": err.Error(),
+			"path":  path,
+		})
+		http.Error(w, "Invalid topic format", http.StatusBadRequest)
+		return
+	}
+
+	projectDetail, err := getProjectDetail(topic)
+	if err != nil {
+		log.Printf("Failed to get project detail for topic '%s': %v", topic, err)
+		logStructured("ERROR", "database", "Failed to get project detail", map[string]interface{}{
+			"error": err.Error(),
+			"topic": topic,
+		})
+		http.Error(w, "Failed to get project detail", http.StatusInternalServerError)
+		return
+	}
+
+	if projectDetail == nil {
+		log.Printf("Project not found: %s", topic)
+		logStructured("WARN", "api", "Project not found", map[string]interface{}{
+			"topic": topic,
+		})
+		http.Error(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	log.Printf("Successfully retrieved project detail for '%s' with %d bookmarks", topic, len(projectDetail.Bookmarks))
+	logStructured("INFO", "database", "Project detail retrieved", map[string]interface{}{
+		"topic":          topic,
+		"bookmarkCount":  len(projectDetail.Bookmarks),
+		"status":         projectDetail.Status,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projectDetail)
+}
+
+func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
+	logStructured("INFO", "database", "Getting project detail", map[string]interface{}{
+		"topic": topic,
+	})
+
+	// First check if the project exists and get basic info
+	var linkCount int
+	var lastUpdated string
+	var hasWorkingBookmarks bool
+
+	// Check for working bookmarks in this topic
+	var nullableLastUpdated sql.NullString
+	err := db.QueryRow(`
+		SELECT COUNT(*), MAX(timestamp) 
+		FROM bookmarks 
+		WHERE topic = ? AND action = 'working'
+	`, topic).Scan(&linkCount, &nullableLastUpdated)
+	
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to get working project info: %v", err)
+	}
+	
+	hasWorkingBookmarks = linkCount > 0
+	if nullableLastUpdated.Valid {
+		lastUpdated = nullableLastUpdated.String
+	}
+
+	// If no working bookmarks, check for any bookmarks with this topic
+	if !hasWorkingBookmarks {
+		err = db.QueryRow(`
+			SELECT COUNT(*), MAX(timestamp) 
+			FROM bookmarks 
+			WHERE topic = ?
+		`, topic).Scan(&linkCount, &nullableLastUpdated)
+		
+		if err != nil {
+			return nil, fmt.Errorf("failed to get project info: %v", err)
+		}
+		
+		if linkCount == 0 {
+			return nil, nil // Project not found
+		}
+		
+		if nullableLastUpdated.Valid {
+			lastUpdated = nullableLastUpdated.String
+		}
+	}
+
+	// Parse timestamp and format as ISO 8601
+	var formattedLastUpdated string
+	if timestamp, err := time.Parse("2006-01-02 15:04:05", lastUpdated); err == nil {
+		formattedLastUpdated = timestamp.UTC().Format(time.RFC3339)
+	} else {
+		formattedLastUpdated = lastUpdated
+	}
+
+	// Determine status based on recency
+	var status string
+	if timestamp, err := time.Parse(time.RFC3339, formattedLastUpdated); err == nil {
+		daysSince := time.Since(timestamp).Hours() / 24
+		if daysSince <= 7 {
+			status = "active"
+		} else if daysSince <= 30 {
+			status = "stale"
+		} else {
+			status = "inactive"
+		}
+	} else {
+		status = "unknown"
+	}
+
+
+	// Get all bookmarks for this topic
+	bookmarks, err := getProjectBookmarks(topic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project bookmarks: %v", err)
+	}
+
+	response := &ProjectDetailResponse{
+		Topic:       topic,
+		LinkCount:   linkCount,
+		LastUpdated: formattedLastUpdated,
+		Status:      status,
+		Bookmarks:   bookmarks,
+	}
+
+	return response, nil
+}
+
+func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
+	querySQL := `
+		SELECT id, url, title, description, content, timestamp, action
+		FROM bookmarks 
+		WHERE topic = ?
+		ORDER BY timestamp DESC
+	`
+	
+	rows, err := db.Query(querySQL, topic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query project bookmarks: %v", err)
+	}
+	defer rows.Close()
+
+	var bookmarks []ProjectBookmark
+	for rows.Next() {
+		var bookmark ProjectBookmark
+		var timestamp string
+		var description, content, action sql.NullString
+		
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, 
+			&description, &content, &timestamp, &action)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
+		}
+		
+		// Handle nullable fields
+		if description.Valid {
+			bookmark.Description = description.String
+		}
+		if content.Valid {
+			bookmark.Content = content.String
+		}
+		if action.Valid {
+			bookmark.Action = action.String
+		}
+		
+		// Parse and format timestamp
+		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
+			bookmark.Timestamp = ts.UTC().Format(time.RFC3339)
+			
+			// Calculate age
+			age := time.Since(ts)
+			if age.Hours() < 24 {
+				bookmark.Age = fmt.Sprintf("%.0fh", age.Hours())
+			} else {
+				bookmark.Age = fmt.Sprintf("%.0fd", age.Hours()/24)
+			}
+		} else if ts, err := time.Parse(time.RFC3339, timestamp); err == nil {
+			bookmark.Timestamp = timestamp
+			
+			// Calculate age for RFC3339 format
+			age := time.Since(ts)
+			if age.Hours() < 24 {
+				bookmark.Age = fmt.Sprintf("%.0fh", age.Hours())
+			} else {
+				bookmark.Age = fmt.Sprintf("%.0fd", age.Hours()/24)
+			}
+		} else {
+			bookmark.Timestamp = timestamp
+			bookmark.Age = "unknown"
+		}
+		
+		// Extract domain from URL
+		if u, err := url.Parse(bookmark.URL); err == nil {
+			bookmark.Domain = u.Hostname()
+		} else {
+			bookmark.Domain = "unknown"
+		}
+		
+		bookmarks = append(bookmarks, bookmark)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating project bookmarks: %v", err)
+	}
+
+	return bookmarks, nil
 }

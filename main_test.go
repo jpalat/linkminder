@@ -838,7 +838,7 @@ func TestGetActiveProjects_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestGetActiveProjects_ProgressCalculation(t *testing.T) {
+func TestGetActiveProjects_LinkCounts(t *testing.T) {
 	withTestDB(t, func(t *testing.T, tdb *TestDB) {
 		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
 		
@@ -846,11 +846,10 @@ func TestGetActiveProjects_ProgressCalculation(t *testing.T) {
 		testCases := []struct {
 			topic         string
 			linkCount     int
-			expectedProgress int
 		}{
-			{"SmallProject", 1, 10},    // 1 * 10 = 10
-			{"MediumProject", 5, 50},   // 5 * 10 = 50  
-			{"LargeProject", 15, 100},  // 15 * 10 = 150, capped at 100
+			{"SmallProject", 1},
+			{"MediumProject", 5},
+			{"LargeProject", 15},
 		}
 		
 		for _, tc := range testCases {
@@ -868,14 +867,14 @@ func TestGetActiveProjects_ProgressCalculation(t *testing.T) {
 			t.Fatalf("getActiveProjects failed: %v", err)
 		}
 		
-		progressMap := make(map[string]int)
+		linkCountMap := make(map[string]int)
 		for _, project := range projects {
-			progressMap[project.Topic] = project.Progress
+			linkCountMap[project.Topic] = project.LinkCount
 		}
 		
 		for _, tc := range testCases {
-			if progressMap[tc.topic] != tc.expectedProgress {
-				t.Errorf("Topic %s: expected progress %d, got %d", tc.topic, tc.expectedProgress, progressMap[tc.topic])
+			if linkCountMap[tc.topic] != tc.linkCount {
+				t.Errorf("Topic %s: expected link count %d, got %d", tc.topic, tc.linkCount, linkCountMap[tc.topic])
 			}
 		}
 	})
@@ -1108,9 +1107,6 @@ func TestProjects_ResponseStructure(t *testing.T) {
 			if project.Status == "" {
 				t.Error("Active project status should not be empty")
 			}
-			if project.Progress < 0 || project.Progress > 100 {
-				t.Errorf("Active project progress should be 0-100, got %d", project.Progress)
-			}
 		}
 		
 		// Validate reference collection fields
@@ -1180,9 +1176,6 @@ func TestProjectsWorkflow_EndToEnd(t *testing.T) {
 		}
 		if activeProject.LinkCount != 1 {
 			t.Errorf("Expected link count 1, got %d", activeProject.LinkCount)
-		}
-		if activeProject.Progress != 10 {
-			t.Errorf("Expected progress 10, got %d", activeProject.Progress)
 		}
 		
 		refCollection := finalResponse.ReferenceCollections[0]

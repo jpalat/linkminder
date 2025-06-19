@@ -204,6 +204,14 @@
             background: #f8fafc;
             border-radius: 8px;
             border-left: 4px solid #4299e1;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .project-card:hover {
+            background: #edf2f7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
         .project-title {
@@ -218,19 +226,6 @@
             margin-bottom: 1rem;
         }
 
-        .project-progress {
-            background: #e2e8f0;
-            height: 8px;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 0.5rem;
-        }
-
-        .project-progress-bar {
-            height: 100%;
-            background: #4299e1;
-            transition: width 0.3s;
-        }
 
         .status-badge {
             display: inline-block;
@@ -309,6 +304,129 @@
             cursor: not-allowed;
         }
 
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .close:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .project-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .project-detail-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .bookmark-item {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 3px solid #4299e1;
+        }
+
+        .bookmark-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+        }
+
+        .bookmark-url {
+            color: #4299e1;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: block;
+            word-break: break-all;
+        }
+
+        .bookmark-url:hover {
+            text-decoration: underline;
+        }
+
+        .bookmark-description {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+
+        .bookmark-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
+
+        .bookmark-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -376,6 +494,31 @@
         </div>
     </div>
 
+    <!-- Project Detail Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalProjectTitle">Project Details</h2>
+                <button class="close" onclick="closeProjectModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="loading" id="projectDetailLoading">Loading project details...</div>
+                <div id="projectDetailContent" style="display: none;">
+                    <div class="project-detail-header">
+                        <div>
+                            <span class="status-badge" id="projectDetailStatus">active</span>
+                        </div>
+                        <div class="project-detail-stats">
+                            <span id="projectDetailLinkCount">0 links</span>
+                            <span id="projectDetailLastUpdated">Updated recently</span>
+                        </div>
+                    </div>
+                    <div id="projectBookmarks"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global state
         let currentTriagePage = 0;
@@ -411,6 +554,23 @@
             } catch (error) {
                 console.error('Failed to fetch projects:', error);
                 document.getElementById('projectsLoading').textContent = 'Failed to load projects';
+            }
+        }
+
+        async function fetchProjectDetail(topic) {
+            try {
+                const encodedTopic = encodeURIComponent(topic);
+                const response = await fetch(`/api/projects/${encodedTopic}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch project detail: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                updateProjectDetailDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch project detail:', error);
+                document.getElementById('projectDetailLoading').textContent = 'Failed to load project details';
             }
         }
 
@@ -504,13 +664,10 @@
             }
 
             grid.innerHTML = data.activeProjects.map(project => `
-                <div class="project-card">
+                <div class="project-card" onclick="openProjectDetail('${escapeHtml(project.topic)}')">
                     <div class="project-title">${escapeHtml(project.topic)}</div>
                     <div class="project-meta">
                         ${project.linkCount} links • Updated ${formatDate(project.lastUpdated)}
-                    </div>
-                    <div class="project-progress">
-                        <div class="project-progress-bar" style="width: ${project.progress}%"></div>
                     </div>
                     <span class="status-badge status-${project.status}">${project.status}</span>
                 </div>
@@ -518,6 +675,77 @@
 
             grid.style.display = 'grid';
         }
+
+        function updateProjectDetailDisplay(project) {
+            const loading = document.getElementById('projectDetailLoading');
+            const content = document.getElementById('projectDetailContent');
+            
+            loading.style.display = 'none';
+            
+            // Update header
+            document.getElementById('modalProjectTitle').textContent = project.topic;
+            document.getElementById('projectDetailStatus').textContent = project.status;
+            document.getElementById('projectDetailStatus').className = `status-badge status-${project.status}`;
+            document.getElementById('projectDetailLinkCount').textContent = `${project.linkCount} links`;
+            document.getElementById('projectDetailLastUpdated').textContent = `Updated ${formatDate(project.lastUpdated)}`;
+            
+            // Update bookmarks
+            const bookmarksContainer = document.getElementById('projectBookmarks');
+            if (!project.bookmarks || project.bookmarks.length === 0) {
+                bookmarksContainer.innerHTML = '<div class="empty-state">No bookmarks in this project</div>';
+            } else {
+                bookmarksContainer.innerHTML = project.bookmarks.map(bookmark => `
+                    <div class="bookmark-item">
+                        <div class="bookmark-title">${escapeHtml(bookmark.title)}</div>
+                        <a href="${bookmark.url}" target="_blank" class="bookmark-url">${bookmark.url}</a>
+                        ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
+                        <div class="bookmark-meta">
+                            <span>${bookmark.domain}</span>
+                            <span>${bookmark.age}</span>
+                            <span>Action: ${bookmark.action || 'none'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            content.style.display = 'block';
+        }
+
+        // Modal functions
+        function openProjectDetail(topic) {
+            const modal = document.getElementById('projectModal');
+            const loading = document.getElementById('projectDetailLoading');
+            const content = document.getElementById('projectDetailContent');
+            
+            // Show modal
+            modal.style.display = 'block';
+            
+            // Reset state
+            loading.style.display = 'block';
+            content.style.display = 'none';
+            
+            // Fetch and display project details
+            fetchProjectDetail(topic);
+        }
+
+        function closeProjectModal() {
+            document.getElementById('projectModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('projectModal');
+            if (event.target === modal) {
+                closeProjectModal();
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeProjectModal();
+            }
+        });
 
         // Action functions
         async function markAsReadLater(bookmarkId) {
