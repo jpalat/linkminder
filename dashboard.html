@@ -76,6 +76,10 @@
             border-left-color: #48bb78;
         }
 
+        .stat-card.archived {
+            border-left-color: #718096;
+        }
+
         .stat-card.total {
             border-left-color: #805ad5;
         }
@@ -191,6 +195,15 @@
 
         .btn-success:hover {
             background: #38a169;
+        }
+
+        .btn-archive {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-archive:hover {
+            background: #5a6b7b;
         }
 
         .projects-grid {
@@ -464,6 +477,10 @@
                 <div class="stat-number" id="shareCount">-</div>
                 <div class="stat-label">Ready to Share</div>
             </div>
+            <div class="stat-card archived">
+                <div class="stat-number" id="archivedCount">-</div>
+                <div class="stat-label">Archived</div>
+            </div>
             <div class="stat-card total">
                 <div class="stat-number" id="totalCount">-</div>
                 <div class="stat-label">Total Bookmarks</div>
@@ -579,6 +596,7 @@
             document.getElementById('triageCount').textContent = stats.needsTriage || 0;
             document.getElementById('projectsCount').textContent = stats.activeProjects || 0;
             document.getElementById('shareCount').textContent = stats.readyToShare || 0;
+            document.getElementById('archivedCount').textContent = stats.archived || 0;
             document.getElementById('totalCount').textContent = stats.totalBookmarks || 0;
         }
 
@@ -610,6 +628,7 @@
                         <button class="btn btn-secondary" onclick="markAsReadLater(${bookmark.id})">Later</button>
                         <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id})">Working</button>
                         <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
+                        <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
                     </div>
                 </div>
             `).join('');
@@ -704,6 +723,9 @@
                             <span>${bookmark.age}</span>
                             <span>Action: ${bookmark.action || 'none'}</span>
                         </div>
+                        <div class="bookmark-actions">
+                            <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
+                        </div>
                     </div>
                 `).join('');
             }
@@ -749,24 +771,55 @@
 
         // Action functions
         async function markAsReadLater(bookmarkId) {
-            // This would require an update API endpoint
-            console.log('Mark as read later:', bookmarkId);
-            // For now, just refresh the triage queue
-            refreshTriage();
+            await updateBookmarkAction(bookmarkId, 'read-later');
         }
 
         async function markAsWorking(bookmarkId) {
-            // This would require an update API endpoint
-            console.log('Mark as working:', bookmarkId);
-            // For now, just refresh the triage queue
-            refreshTriage();
+            const topic = prompt('Enter topic for this project:');
+            if (topic) {
+                await updateBookmarkAction(bookmarkId, 'working', topic);
+            }
         }
 
         async function markAsShare(bookmarkId) {
-            // This would require an update API endpoint
-            console.log('Mark as share:', bookmarkId);
-            // For now, just refresh the triage queue
-            refreshTriage();
+            await updateBookmarkAction(bookmarkId, 'share');
+        }
+
+        async function markAsArchived(bookmarkId) {
+            await updateBookmarkAction(bookmarkId, 'archived');
+        }
+
+        async function updateBookmarkAction(bookmarkId, action, topic = '') {
+            try {
+                const response = await fetch(`/api/bookmarks/${bookmarkId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: action,
+                        topic: topic
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to update bookmark: ${response.status}`);
+                }
+
+                console.log(`Successfully marked bookmark ${bookmarkId} as ${action}`);
+                
+                // Refresh all relevant sections
+                refreshTriage();
+                refreshProjects();
+                fetchStats();
+                
+                // Close project modal if open
+                closeProjectModal();
+                
+            } catch (error) {
+                console.error('Failed to update bookmark:', error);
+                alert('Failed to update bookmark. Please try again.');
+            }
         }
 
         function goToTriagePage(page) {
