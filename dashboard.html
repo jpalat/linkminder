@@ -206,6 +206,15 @@
             background: #5a6b7b;
         }
 
+        .btn-preview {
+            background: #805ad5;
+            color: white;
+        }
+
+        .btn-preview:hover {
+            background: #6b46c1;
+        }
+
         .projects-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -440,6 +449,50 @@
             margin-top: 0.5rem;
         }
 
+        .preview-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .preview-container {
+            position: relative;
+            background: #f7fafc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #previewFrame {
+            border: none;
+            background: white;
+        }
+
+        .preview-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 500px;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .preview-error {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 500px;
+            color: #e53e3e;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .preview-error h3 {
+            margin-bottom: 1rem;
+        }
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -453,6 +506,21 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 1rem;
+            }
+            
+            .preview-controls {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            #previewFrame {
+                height: 400px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 1% auto;
+                max-height: 95vh;
             }
         }
     </style>
@@ -535,9 +603,30 @@
         </div>
     </div>
 
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="previewTitle">Preview</h2>
+                <button class="close" onclick="closePreviewModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-controls">
+                    <button class="btn btn-primary" id="openInNewWindow" onclick="openInNewWindow()">🔗 Open in New Window</button>
+                    <button class="btn btn-secondary" onclick="closePreviewModal()">Close</button>
+                </div>
+                <div class="preview-container">
+                    <iframe id="previewFrame" src="" frameborder="0" style="width: 100%; height: 500px; border-radius: 8px;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global state
         let currentTriagePage = 0;
+        let currentPreviewUrl = '';
+        let currentPreviewId = null;
         const triageLimit = 10;
 
         // API functions
@@ -624,6 +713,7 @@
                         </div>
                     </div>
                     <div class="triage-actions">
+                        <button class="btn btn-preview" onclick="previewBookmark('${bookmark.url}', \`${bookmark.title.replace(/`/g, '\\`')}\`, ${bookmark.id})">👁️ Preview</button>
                         <button class="btn btn-secondary" onclick="markAsReadLater(${bookmark.id})">Later</button>
                         <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id})">Working</button>
                         <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
@@ -761,16 +851,27 @@
 
         // Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('projectModal');
-            if (event.target === modal) {
+            const projectModal = document.getElementById('projectModal');
+            const previewModal = document.getElementById('previewModal');
+            
+            if (event.target === projectModal) {
                 closeProjectModal();
+            } else if (event.target === previewModal) {
+                closePreviewModal();
             }
         }
 
         // Close modal with Escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                closeProjectModal();
+                const previewModal = document.getElementById('previewModal');
+                const projectModal = document.getElementById('projectModal');
+                
+                if (previewModal.style.display === 'block') {
+                    closePreviewModal();
+                } else if (projectModal.style.display === 'block') {
+                    closeProjectModal();
+                }
             }
         });
 
@@ -843,6 +944,68 @@
             document.getElementById('projectsLoading').style.display = 'block';
             document.getElementById('projectsGrid').style.display = 'none';
             fetchProjects();
+        }
+
+        // Preview functions
+        function previewBookmark(url, title, bookmarkId) {
+            currentPreviewUrl = url;
+            currentPreviewId = bookmarkId;
+            
+            const modal = document.getElementById('previewModal');
+            const previewTitle = document.getElementById('previewTitle');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            // Update modal title
+            previewTitle.textContent = `Preview: ${title}`;
+            
+            // Show modal
+            modal.style.display = 'block';
+            
+            // Load URL in iframe with error handling
+            try {
+                previewFrame.src = url;
+                
+                // Handle iframe load errors
+                previewFrame.onload = function() {
+                    // Successfully loaded
+                };
+                
+                previewFrame.onerror = function() {
+                    showPreviewError('Unable to load preview for this URL. Some sites prevent embedding.');
+                };
+                
+            } catch (error) {
+                showPreviewError('Unable to load preview for this URL.');
+            }
+        }
+        
+        function showPreviewError(message) {
+            const previewContainer = document.querySelector('.preview-container');
+            previewContainer.innerHTML = `
+                <div class="preview-error">
+                    <h3>Preview Not Available</h3>
+                    <p>${message}</p>
+                    <button class="btn btn-primary" onclick="openInNewWindow()" style="margin-top: 1rem;">
+                        🔗 Open in New Window Instead
+                    </button>
+                </div>
+            `;
+        }
+        
+        function openInNewWindow() {
+            if (currentPreviewUrl) {
+                window.open(currentPreviewUrl, '_blank', 'noopener,noreferrer');
+            }
+        }
+        
+        function closePreviewModal() {
+            const modal = document.getElementById('previewModal');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            modal.style.display = 'none';
+            previewFrame.src = ''; // Clear iframe source to stop loading
+            currentPreviewUrl = '';
+            currentPreviewId = null;
         }
 
         // Utility functions
