@@ -1403,3 +1403,850 @@ func TestBookmarkUpdate_ErrorCases(t *testing.T) {
 		}
 	})
 }
+
+// Test Project Detail Handlers (0% coverage)
+func TestHandleProjectDetail_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert test project data
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, topic, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		
+		testData := []struct {
+			url, title, description, content, action, topic string
+		}{
+			{"https://example1.com", "Title 1", "Desc 1", "Content 1", "working", "TestProject"},
+			{"https://example2.com", "Title 2", "Desc 2", "Content 2", "working", "TestProject"},
+			{"https://example3.com", "Title 3", "Desc 3", "Content 3", "working", "OtherProject"},
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.description, data.content, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		req := httptest.NewRequest("GET", "/api/projects/TestProject", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjectDetail(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+		
+		var response ProjectDetailResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if response.Topic != "TestProject" {
+			t.Errorf("Expected topic 'TestProject', got %s", response.Topic)
+		}
+		
+		if response.LinkCount != 2 {
+			t.Errorf("Expected link count 2, got %d", response.LinkCount)
+		}
+		
+		if len(response.Bookmarks) != 2 {
+			t.Errorf("Expected 2 bookmarks, got %d", len(response.Bookmarks))
+		}
+	})
+}
+
+func TestHandleProjectDetail_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		req := httptest.NewRequest("GET", "/api/projects/NonexistentProject", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjectDetail(rr, req)
+		
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
+		}
+	})
+}
+
+func TestHandleProjectByID_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a project first
+		_, err := tdb.db.Exec("INSERT INTO projects (name, description, status) VALUES (?, ?, ?)", "Test Project", "Test Description", "active")
+		if err != nil {
+			t.Fatalf("Failed to create test project: %v", err)
+		}
+		
+		// Get the project ID
+		var projectID int
+		err = tdb.db.QueryRow("SELECT id FROM projects WHERE name = ?", "Test Project").Scan(&projectID)
+		if err != nil {
+			t.Fatalf("Failed to get project ID: %v", err)
+		}
+		
+		// Insert bookmarks for this project
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, project_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		_, err = tdb.db.Exec(insertSQL, "https://test1.com", "Test 1", "Desc 1", "Content 1", "working", projectID, "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/projects/id/%d", projectID), nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjectByID(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
+		}
+		
+		var response ProjectDetailResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if response.Topic != "Test Project" {
+			t.Errorf("Expected project topic 'Test Project', got %s", response.Topic)
+		}
+		
+		if response.LinkCount != 1 {
+			t.Errorf("Expected link count 1, got %d", response.LinkCount)
+		}
+	})
+}
+
+func TestHandleProjectByID_InvalidID(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		req := httptest.NewRequest("GET", "/api/projects/id/invalid", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjectByID(rr, req)
+		
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status %d, got %d", http.StatusBadRequest, rr.Code)
+		}
+	})
+}
+
+func TestHandleProjectByID_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		req := httptest.NewRequest("GET", "/api/projects/id/99999", nil)
+		rr := httptest.NewRecorder()
+		
+		handleProjectByID(rr, req)
+		
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
+		}
+	})
+}
+
+// Test Projects Page Handler (0% coverage)
+func TestHandleProjectsPage_Success(t *testing.T) {
+	// Create a temporary projects.html file
+	tmpDir := t.TempDir()
+	projectsPath := filepath.Join(tmpDir, "projects.html")
+	
+	projectsContent := `<!DOCTYPE html>
+<html><head><title>Test Projects</title></head>
+<body><h1>Test Projects</h1></body></html>`
+	
+	err := os.WriteFile(projectsPath, []byte(projectsContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test projects file: %v", err)
+	}
+	
+	originalWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(originalWd)
+	
+	req := httptest.NewRequest("GET", "/projects", nil)
+	rr := httptest.NewRecorder()
+	
+	handleProjectsPage(rr, req)
+	
+	if rr.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+	
+	if !strings.Contains(rr.Body.String(), "Test Projects") {
+		t.Error("Expected projects HTML content")
+	}
+	
+	contentType := rr.Header().Get("Content-Type")
+	if contentType != "text/html" {
+		t.Errorf("Expected Content-Type 'text/html', got %s", contentType)
+	}
+}
+
+func TestHandleProjectsPage_FileNotFound(t *testing.T) {
+	// Test when projects.html doesn't exist
+	tmpDir := t.TempDir()
+	originalWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(originalWd)
+	
+	req := httptest.NewRequest("GET", "/projects", nil)
+	rr := httptest.NewRecorder()
+	
+	handleProjectsPage(rr, req)
+	
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
+	}
+}
+
+// Test Database Helper Functions (0% coverage)
+func TestGetProjectDetail_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert test data
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, topic, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		
+		testData := []struct {
+			url, title, description, content, action, topic string
+		}{
+			{"https://example1.com", "Title 1", "Desc 1", "Content 1", "working", "TestProject"},
+			{"https://example2.com", "Title 2", "Desc 2", "Content 2", "working", "TestProject"},
+		}
+		
+		for i, data := range testData {
+			_, err := tdb.db.Exec(insertSQL, data.url, data.title, data.description, data.content, data.action, data.topic, "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		response, err := getProjectDetail("TestProject")
+		if err != nil {
+			t.Fatalf("getProjectDetail failed: %v", err)
+		}
+		
+		if response.Topic != "TestProject" {
+			t.Errorf("Expected topic 'TestProject', got %s", response.Topic)
+		}
+		
+		if response.LinkCount != 2 {
+			t.Errorf("Expected link count 2, got %d", response.LinkCount)
+		}
+		
+		if len(response.Bookmarks) != 2 {
+			t.Errorf("Expected 2 bookmarks, got %d", len(response.Bookmarks))
+		}
+		
+		// Verify bookmark details
+		for _, bookmark := range response.Bookmarks {
+			if bookmark.Domain == "" {
+				t.Error("Bookmark domain should not be empty")
+			}
+			if bookmark.Age == "" {
+				t.Error("Bookmark age should not be empty")
+			}
+		}
+	})
+}
+
+func TestGetProjectDetail_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		_, err := getProjectDetail("NonexistentProject")
+		if err == nil {
+			t.Error("Expected error for nonexistent project")
+		}
+	})
+}
+
+func TestGetProjectBookmarks_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert test data
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, topic, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		_, err := tdb.db.Exec(insertSQL, "https://example.com", "Title", "Desc", "Content", "working", "TestProject", "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test data: %v", err)
+		}
+		
+		bookmarks, err := getProjectBookmarks("TestProject")
+		if err != nil {
+			t.Fatalf("getProjectBookmarks failed: %v", err)
+		}
+		
+		if len(bookmarks) != 1 {
+			t.Errorf("Expected 1 bookmark, got %d", len(bookmarks))
+		}
+		
+		bookmark := bookmarks[0]
+		if bookmark.URL != "https://example.com" {
+			t.Errorf("Expected URL 'https://example.com', got %s", bookmark.URL)
+		}
+		if bookmark.Domain != "example.com" {
+			t.Errorf("Expected domain 'example.com', got %s", bookmark.Domain)
+		}
+	})
+}
+
+func TestGetProjectDetailByID_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a project
+		result, err := tdb.db.Exec("INSERT INTO projects (name, description, status) VALUES (?, ?, ?)", "Test Project", "Test Description", "active")
+		if err != nil {
+			t.Fatalf("Failed to create test project: %v", err)
+		}
+		
+		projectID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get project ID: %v", err)
+		}
+		
+		// Insert bookmarks for this project
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, project_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		_, err = tdb.db.Exec(insertSQL, "https://test.com", "Test", "Desc", "Content", "working", projectID, "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		response, err := getProjectDetailByID(int(projectID))
+		if err != nil {
+			t.Fatalf("getProjectDetailByID failed: %v", err)
+		}
+		
+		if response.Topic != "Test Project" {
+			t.Errorf("Expected project topic 'Test Project', got %s", response.Topic)
+		}
+		
+		if response.LinkCount != 1 {
+			t.Errorf("Expected link count 1, got %d", response.LinkCount)
+		}
+	})
+}
+
+func TestGetProjectDetailByID_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		_, err := getProjectDetailByID(99999)
+		if err == nil {
+			t.Error("Expected error for nonexistent project ID")
+		}
+	})
+}
+
+func TestGetProjectBookmarksByID_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a project
+		result, err := tdb.db.Exec("INSERT INTO projects (name, description, status) VALUES (?, ?, ?)", "Test Project", "Test Description", "active")
+		if err != nil {
+			t.Fatalf("Failed to create test project: %v", err)
+		}
+		
+		projectID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get project ID: %v", err)
+		}
+		
+		// Insert bookmarks for this project
+		insertSQL := `INSERT INTO bookmarks (url, title, description, content, action, project_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		_, err = tdb.db.Exec(insertSQL, "https://test.com", "Test", "Desc", "Content", "working", projectID, "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarks, err := getProjectBookmarksByID(int(projectID))
+		if err != nil {
+			t.Fatalf("getProjectBookmarksByID failed: %v", err)
+		}
+		
+		if len(bookmarks) != 1 {
+			t.Errorf("Expected 1 bookmark, got %d", len(bookmarks))
+		}
+		
+		bookmark := bookmarks[0]
+		if bookmark.URL != "https://test.com" {
+			t.Errorf("Expected URL 'https://test.com', got %s", bookmark.URL)
+		}
+	})
+}
+
+// Test Database Initialization Functions (0% coverage - these are tricky to test)
+func TestValidateDB_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		originalDB := db
+		db = tdb.db
+		defer func() { db = originalDB }()
+		
+		err := validateDB()
+		if err != nil {
+			t.Errorf("validateDB failed on valid database: %v", err)
+		}
+	})
+}
+
+func TestValidateDB_MissingTable(t *testing.T) {
+	// Create a database without the required tables
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "invalid_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	defer testDB.Close()
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	err = validateDB()
+	if err == nil {
+		t.Error("Expected validateDB to fail on database without tables")
+	}
+}
+
+// Test Database Error Handling
+func TestSaveBookmarkToDB_DatabaseError(t *testing.T) {
+	// Test with closed database to trigger error
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	req := BookmarkRequest{
+		URL:   "https://example.com",
+		Title: "Test Title",
+	}
+	
+	err = saveBookmarkToDB(req)
+	if err == nil {
+		t.Error("Expected saveBookmarkToDB to fail with closed database")
+	}
+}
+
+func TestUpdateBookmarkInDB_DatabaseError(t *testing.T) {
+	// Test with closed database to trigger error
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	req := BookmarkUpdateRequest{
+		Action: "archived",
+	}
+	
+	err = updateBookmarkInDB(1, req)
+	if err == nil {
+		t.Error("Expected updateBookmarkInDB to fail with closed database")
+	}
+}
+
+// Test Logging Functions
+func TestLogStructured_Success(t *testing.T) {
+	// Create a temporary log file
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "test.log")
+	
+	// Create the log file
+	logFile_test, err := os.Create(logPath)
+	if err != nil {
+		t.Fatalf("Failed to create test log file: %v", err)
+	}
+	defer logFile_test.Close()
+	
+	// Save original state
+	originalLogFile := logFile
+	logFile = logFile_test
+	defer func() { logFile = originalLogFile }()
+	
+	// Test logging
+	logStructured("INFO", "test", "test message", map[string]interface{}{
+		"key": "value",
+	})
+	
+	// Verify log was written
+	logFile_test.Close()
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	
+	if !strings.Contains(string(content), "test message") {
+		t.Error("Expected log message to be written")
+	}
+	
+	if !strings.Contains(string(content), "INFO") {
+		t.Error("Expected log level to be written")
+	}
+}
+
+func TestLogStructured_WithNilFile(t *testing.T) {
+	// Save original state
+	originalLogFile := logFile
+	logFile = nil
+	defer func() { logFile = originalLogFile }()
+	
+	// This should not panic
+	logStructured("INFO", "test", "test message", nil)
+}
+
+// Test Additional HTTP Handler Edge Cases
+func TestHandleTriageQueue_WithPagination(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert multiple triage items
+		insertSQL := `INSERT INTO bookmarks (url, title, action, timestamp) VALUES (?, ?, ?, ?)`
+		
+		for i := 0; i < 5; i++ {
+			url := fmt.Sprintf("https://example%d.com", i)
+			title := fmt.Sprintf("Title %d", i)
+			_, err := tdb.db.Exec(insertSQL, url, title, "read-later", "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		// Test with limit and offset
+		req := httptest.NewRequest("GET", "/api/bookmarks/triage?limit=2&offset=1", nil)
+		rr := httptest.NewRecorder()
+		
+		handleTriageQueue(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		var response TriageResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if response.Limit != 2 {
+			t.Errorf("Expected limit 2, got %d", response.Limit)
+		}
+		
+		if response.Offset != 1 {
+			t.Errorf("Expected offset 1, got %d", response.Offset)
+		}
+		
+		if len(response.Bookmarks) > 2 {
+			t.Errorf("Expected at most 2 bookmarks, got %d", len(response.Bookmarks))
+		}
+	})
+}
+
+func TestHandleTriageQueue_InvalidParameters(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with invalid limit
+		req := httptest.NewRequest("GET", "/api/bookmarks/triage?limit=invalid", nil)
+		rr := httptest.NewRecorder()
+		
+		handleTriageQueue(rr, req)
+		
+		// Should still work with default limit
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		// Test with invalid offset
+		req = httptest.NewRequest("GET", "/api/bookmarks/triage?offset=invalid", nil)
+		rr = httptest.NewRecorder()
+		
+		handleTriageQueue(rr, req)
+		
+		// Should still work with default offset
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+	})
+}
+
+// Test Dashboard Error Cases
+func TestHandleDashboard_FileNotFound(t *testing.T) {
+	// Test when dashboard.html doesn't exist
+	tmpDir := t.TempDir()
+	originalWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(originalWd)
+	
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	
+	handleDashboard(rr, req)
+	
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
+	}
+}
+
+func TestHandleDashboard_FileReadError(t *testing.T) {
+	// Create a directory instead of a file to cause read error
+	tmpDir := t.TempDir()
+	dashboardDir := filepath.Join(tmpDir, "dashboard.html")
+	
+	err := os.Mkdir(dashboardDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create dashboard directory: %v", err)
+	}
+	
+	originalWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(originalWd)
+	
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	
+	handleDashboard(rr, req)
+	
+	// Should return an error when trying to read a directory as a file
+	if rr.Code == http.StatusOK {
+		t.Error("Expected error when reading directory as file")
+	}
+}
+
+// Test Stats Summary Edge Cases
+func TestHandleStatsSummary_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	req := httptest.NewRequest("GET", "/api/stats/summary", nil)
+	rr := httptest.NewRecorder()
+	
+	handleStatsSummary(rr, req)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestGetTopicsFromDB_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	_, err = getTopicsFromDB()
+	if err == nil {
+		t.Error("Expected getTopicsFromDB to fail with closed database")
+	}
+}
+
+func TestGetStatsSummary_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	_, err = getStatsSummary()
+	if err == nil {
+		t.Error("Expected getStatsSummary to fail with closed database")
+	}
+}
+
+// Test Project Stats Edge Cases
+func TestGetProjectStats_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	_, err = getProjectStats()
+	if err == nil {
+		t.Error("Expected getProjectStats to fail with closed database")
+	}
+}
+
+func TestGetTriageQueue_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	_, err = getTriageQueue(10, 0)
+	if err == nil {
+		t.Error("Expected getTriageQueue to fail with closed database")
+	}
+}
+
+func TestGetProjects_DatabaseError(t *testing.T) {
+	// Test with closed database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	_, err = getProjects()
+	if err == nil {
+		t.Error("Expected getProjects to fail with closed database")
+	}
+}
+
+// Test Additional Bookmark Validation Edge Cases
+func TestSaveBookmarkToDB_EdgeCases(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with projectId
+		req := BookmarkRequest{
+			URL:       "https://example.com",
+			Title:     "Test Title",
+			Action:    "working",
+			ProjectID: 1, // Will be ignored since project doesn't exist
+		}
+		
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Errorf("saveBookmarkToDB failed: %v", err)
+		}
+		
+		// Verify it was saved
+		var count int
+		err = tdb.db.QueryRow("SELECT COUNT(*) FROM bookmarks WHERE url = ?", req.URL).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to query saved bookmark: %v", err)
+		}
+		
+		if count != 1 {
+			t.Errorf("Expected 1 bookmark, got %d", count)
+		}
+	})
+}
+
+func TestUpdateBookmarkInDB_EdgeCases(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert a test bookmark
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		result, err := tdb.db.Exec(insertSQL, "https://test.com", "Test", "read-later", "", "2023-12-01 10:00:00")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarkID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+		
+		// Test updating with projectId
+		req := BookmarkUpdateRequest{
+			Action:    "working",
+			ProjectID: 999, // Non-existent project
+		}
+		
+		err = updateBookmarkInDB(int(bookmarkID), req)
+		if err != nil {
+			t.Errorf("updateBookmarkInDB failed: %v", err)
+		}
+		
+		// Verify it was updated
+		var action string
+		var projectId sql.NullInt64
+		err = tdb.db.QueryRow("SELECT action, project_id FROM bookmarks WHERE id = ?", bookmarkID).Scan(&action, &projectId)
+		if err != nil {
+			t.Fatalf("Failed to query updated bookmark: %v", err)
+		}
+		
+		if action != "working" {
+			t.Errorf("Expected action 'working', got %s", action)
+		}
+	})
+}
+
+// Test URL Parsing Edge Cases
+func TestBookmarkDetailResponseDomain(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert bookmarks with various URL formats
+		insertSQL := `INSERT INTO bookmarks (url, title, action, topic, timestamp) VALUES (?, ?, ?, ?, ?)`
+		
+		testCases := []struct {
+			url            string
+			expectedDomain string
+		}{
+			{"https://example.com/path", "example.com"},
+			{"http://sub.example.com", "sub.example.com"},
+			{"https://example.com:8080/path", "example.com:8080"},
+			{"invalid-url", "invalid-url"}, // Should handle invalid URLs gracefully
+			{"", ""},                       // Empty URL
+		}
+		
+		for i, tc := range testCases {
+			title := fmt.Sprintf("Test %d", i)
+			_, err := tdb.db.Exec(insertSQL, tc.url, title, "read-later", "TestTopic", "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test data %d: %v", i, err)
+			}
+		}
+		
+		// Get triage queue to test domain parsing
+		triageData, err := getTriageQueue(10, 0)
+		if err != nil {
+			t.Fatalf("getTriageQueue failed: %v", err)
+		}
+		
+		// Verify domain parsing
+		for i, bookmark := range triageData.Bookmarks {
+			if i < len(testCases) {
+				expectedDomain := testCases[i].expectedDomain
+				if bookmark.Domain != expectedDomain {
+					t.Errorf("Bookmark %d: expected domain %s, got %s", i, expectedDomain, bookmark.Domain)
+				}
+			}
+		}
+	})
+}
