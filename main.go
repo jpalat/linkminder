@@ -72,6 +72,7 @@ type TriageBookmark struct {
 	Domain      string `json:"domain"`
 	Age         string `json:"age"`
 	Suggested   string `json:"suggested"`
+	Topic       string `json:"topic"`
 }
 
 type TriageResponse struct {
@@ -886,7 +887,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 
 	// Get the bookmarks
 	querySQL := `
-		SELECT id, url, title, description, timestamp 
+		SELECT id, url, title, description, timestamp, topic 
 		FROM bookmarks 
 		WHERE action IS NULL OR action = '' OR action = 'read-later'
 		ORDER BY timestamp DESC
@@ -903,9 +904,9 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	for rows.Next() {
 		var bookmark TriageBookmark
 		var timestamp string
-		var description sql.NullString
+		var description, topic sql.NullString
 		
-		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp)
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan triage bookmark: %v", err)
 		}
@@ -915,6 +916,13 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 			bookmark.Description = html.EscapeString(description.String)
 		} else {
 			bookmark.Description = ""
+		}
+		
+		// Handle nullable topic and escape HTML
+		if topic.Valid {
+			bookmark.Topic = html.EscapeString(topic.String)
+		} else {
+			bookmark.Topic = ""
 		}
 		
 		// Escape HTML in other user-provided fields
