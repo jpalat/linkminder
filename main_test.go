@@ -1419,6 +1419,142 @@ func TestBookmarkUpdate(t *testing.T) {
 }
 
 // Test bookmark update error cases
+func TestBookmarkFullUpdate_PUT(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.cleanup(t)
+
+	// Set the global database
+	db = testDB.db
+
+	// Insert a test bookmark first
+	insertSQL := `
+	INSERT INTO bookmarks (url, title, description, action, topic, timestamp)
+	VALUES (?, ?, ?, ?, ?, '2023-12-01 10:00:00')`
+	
+	result, err := testDB.db.Exec(insertSQL, 
+		"https://old-example.com", "Old Title", "Old description", "read-later", "OldTopic")
+	if err != nil {
+		t.Fatalf("Failed to insert test bookmark: %v", err)
+	}
+	
+	bookmarkID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("Failed to get bookmark ID: %v", err)
+	}
+
+	// Test PUT request for full bookmark update
+	updateData := BookmarkFullUpdateRequest{
+		Title:       "Updated Title",
+		URL:         "https://updated-example.com",
+		Description: "Updated description",
+		Action:      "working",
+		Topic:       "UpdatedTopic",
+		ShareTo:     "",
+	}
+
+	requestBody, _ := json.Marshal(updateData)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleBookmarkUpdate(w, req)
+
+	// Check response
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response["status"] != "success" {
+		t.Errorf("Expected success status, got %s", response["status"])
+	}
+
+	// Verify the bookmark was updated in database
+	var title, url, description, action, topic string
+	err = testDB.db.QueryRow(
+		"SELECT title, url, description, action, topic FROM bookmarks WHERE id = ?", 
+		bookmarkID).Scan(&title, &url, &description, &action, &topic)
+	if err != nil {
+		t.Fatalf("Failed to query updated bookmark: %v", err)
+	}
+
+	if title != "Updated Title" {
+		t.Errorf("Expected title 'Updated Title', got '%s'", title)
+	}
+	if url != "https://updated-example.com" {
+		t.Errorf("Expected URL 'https://updated-example.com', got '%s'", url)
+	}
+	if description != "Updated description" {
+		t.Errorf("Expected description 'Updated description', got '%s'", description)
+	}
+	if action != "working" {
+		t.Errorf("Expected action 'working', got '%s'", action)
+	}
+	if topic != "UpdatedTopic" {
+		t.Errorf("Expected topic 'UpdatedTopic', got '%s'", topic)
+	}
+
+	// Verify project was created/assigned
+	var projectCount int
+	err = testDB.db.QueryRow("SELECT COUNT(*) FROM projects WHERE name = ?", "UpdatedTopic").Scan(&projectCount)
+	if err != nil {
+		t.Fatalf("Failed to query projects: %v", err)
+	}
+	if projectCount != 1 {
+		t.Errorf("Expected 1 project with name 'UpdatedTopic', got %d", projectCount)
+	}
+}
+
+func TestBookmarkFullUpdate_ValidationErrors(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.cleanup(t)
+
+	// Set the global database
+	db = testDB.db
+
+	tests := []struct {
+		name     string
+		data     BookmarkFullUpdateRequest
+		expected int
+	}{
+		{
+			name: "Missing title",
+			data: BookmarkFullUpdateRequest{
+				Title: "",
+				URL:   "https://example.com",
+			},
+			expected: http.StatusInternalServerError, // Will fail in updateFullBookmarkInDB
+		},
+		{
+			name: "Missing URL",
+			data: BookmarkFullUpdateRequest{
+				Title: "Test Title",
+				URL:   "",
+			},
+			expected: http.StatusInternalServerError, // Will fail in updateFullBookmarkInDB
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requestBody, _ := json.Marshal(tt.data)
+			req := httptest.NewRequest(http.MethodPut, "/api/bookmarks/999", bytes.NewBuffer(requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handleBookmarkUpdate(w, req)
+
+			if w.Code != tt.expected {
+				t.Errorf("Expected status %d, got %d", tt.expected, w.Code)
+			}
+		})
+	}
+}
+
 func TestBookmarkUpdate_ErrorCases(t *testing.T) {
 	withTestDB(t, func(t *testing.T, tdb *TestDB) {
 		// Test invalid method

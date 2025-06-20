@@ -504,6 +504,55 @@
             margin-bottom: 1rem;
         }
 
+        .edit-form-container {
+            padding: 2rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .edit-form-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #2d3748;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            background: white;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -642,11 +691,63 @@
         </div>
     </div>
 
+    <!-- Edit Bookmark Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="edit-form-container">
+                    <h3 class="edit-form-title">Edit Bookmark</h3>
+                    <form id="editForm">
+                        <div class="form-group">
+                            <label for="editTitle">Title</label>
+                            <input type="text" id="editTitle" name="title" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editURL">URL</label>
+                            <input type="url" id="editURL" name="url" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editDescription">Description</label>
+                            <textarea id="editDescription" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="editAction">Action</label>
+                            <select id="editAction" name="action">
+                                <option value="">No action</option>
+                                <option value="read-later">Read Later</option>
+                                <option value="working">Working</option>
+                                <option value="share">Share</option>
+                                <option value="archived">Archived</option>
+                                <option value="irrelevant">Irrelevant</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="topicGroup" style="display: none;">
+                            <label for="editTopic">Topic</label>
+                            <input type="text" id="editTopic" name="topic" placeholder="Enter project topic...">
+                        </div>
+                        <div class="form-group" id="shareToGroup" style="display: none;">
+                            <label for="editShareTo">Share To</label>
+                            <input type="text" id="editShareTo" name="shareTo" placeholder="Enter recipient...">
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <h2 class="modal-title">Edit Bookmark Details</h2>
+                <div class="footer-actions">
+                    <button class="icon-btn" onclick="saveBookmarkChanges()" title="Save Changes">💾</button>
+                    <button class="icon-btn close" onclick="closeEditModal()" title="Close">&times;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global state
         let currentTriagePage = 0;
         let currentPreviewUrl = '';
         let currentPreviewId = null;
+        let currentEditBookmark = null;
         const triageLimit = 10;
 
         // API functions
@@ -734,7 +835,7 @@
                     </div>
                     <div class="triage-actions">
                         <button class="btn btn-preview" onclick="previewBookmark('${bookmark.url}', \`${bookmark.title.replace(/`/g, '\\`')}\`, ${bookmark.id})">👁️ Preview</button>
-                        <button class="btn btn-secondary" onclick="markAsReadLater(${bookmark.id})">Later</button>
+                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
                         <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id}, '${bookmark.topic || ''}')">Working</button>
                         <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
                         <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
@@ -873,11 +974,14 @@
         window.onclick = function(event) {
             const projectModal = document.getElementById('projectModal');
             const previewModal = document.getElementById('previewModal');
+            const editModal = document.getElementById('editModal');
             
             if (event.target === projectModal) {
                 closeProjectModal();
             } else if (event.target === previewModal) {
                 closePreviewModal();
+            } else if (event.target === editModal) {
+                closeEditModal();
             }
         }
 
@@ -886,19 +990,19 @@
             if (event.key === 'Escape') {
                 const previewModal = document.getElementById('previewModal');
                 const projectModal = document.getElementById('projectModal');
+                const editModal = document.getElementById('editModal');
                 
                 if (previewModal.style.display === 'block') {
                     closePreviewModal();
                 } else if (projectModal.style.display === 'block') {
                     closeProjectModal();
+                } else if (editModal.style.display === 'block') {
+                    closeEditModal();
                 }
             }
         });
 
         // Action functions
-        async function markAsReadLater(bookmarkId) {
-            await updateBookmarkAction(bookmarkId, 'read-later');
-        }
 
         async function markAsWorking(bookmarkId, existingTopic = '') {
             const topic = prompt('Enter topic for this project:', existingTopic);
@@ -1027,6 +1131,139 @@
             currentPreviewUrl = '';
             currentPreviewId = null;
         }
+
+        // Edit functions
+        async function editBookmark(bookmarkId) {
+            try {
+                // Fetch bookmark details from the triage API to get current data
+                const response = await fetch(`/api/bookmarks/triage?limit=1000&offset=0`);
+                const data = await response.json();
+                const bookmark = data.bookmarks.find(b => b.id === bookmarkId);
+                
+                if (!bookmark) {
+                    alert('Bookmark not found');
+                    return;
+                }
+                
+                currentEditBookmark = bookmark;
+                showEditModal(bookmark);
+                
+            } catch (error) {
+                console.error('Failed to fetch bookmark details:', error);
+                alert('Failed to load bookmark details. Please try again.');
+            }
+        }
+        
+        function showEditModal(bookmark) {
+            const modal = document.getElementById('editModal');
+            
+            // Populate form fields
+            document.getElementById('editTitle').value = bookmark.title || '';
+            document.getElementById('editURL').value = bookmark.url || '';
+            document.getElementById('editDescription').value = bookmark.description || '';
+            document.getElementById('editAction').value = bookmark.action || '';
+            document.getElementById('editTopic').value = bookmark.topic || '';
+            document.getElementById('editShareTo').value = bookmark.shareTo || '';
+            
+            // Show/hide conditional fields based on action
+            updateEditFormVisibility();
+            
+            // Show modal
+            modal.style.display = 'block';
+        }
+        
+        function updateEditFormVisibility() {
+            const action = document.getElementById('editAction').value;
+            const topicGroup = document.getElementById('topicGroup');
+            const shareToGroup = document.getElementById('shareToGroup');
+            
+            // Show topic field for working action
+            if (action === 'working') {
+                topicGroup.style.display = 'block';
+            } else {
+                topicGroup.style.display = 'none';
+            }
+            
+            // Show shareTo field for share action
+            if (action === 'share') {
+                shareToGroup.style.display = 'block';
+            } else {
+                shareToGroup.style.display = 'none';
+            }
+        }
+        
+        async function saveBookmarkChanges() {
+            if (!currentEditBookmark) {
+                alert('No bookmark selected for editing');
+                return;
+            }
+            
+            const form = document.getElementById('editForm');
+            const formData = new FormData(form);
+            
+            // Validate required fields
+            const title = formData.get('title').trim();
+            const url = formData.get('url').trim();
+            
+            if (!title || !url) {
+                alert('Title and URL are required fields');
+                return;
+            }
+            
+            try {
+                // Prepare update data
+                const updateData = {
+                    title: title,
+                    url: url,
+                    description: formData.get('description').trim(),
+                    action: formData.get('action'),
+                    topic: formData.get('topic').trim(),
+                    shareTo: formData.get('shareTo').trim()
+                };
+                
+                // Call API to update bookmark
+                const response = await fetch(`/api/bookmarks/${currentEditBookmark.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to update bookmark: ${response.status}`);
+                }
+                
+                console.log(`Successfully updated bookmark ${currentEditBookmark.id}`);
+                
+                // Close modal and refresh triage
+                closeEditModal();
+                refreshTriage();
+                fetchStats();
+                
+            } catch (error) {
+                console.error('Failed to update bookmark:', error);
+                alert('Failed to update bookmark. Please try again.');
+            }
+        }
+        
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            modal.style.display = 'none';
+            currentEditBookmark = null;
+            
+            // Reset form
+            document.getElementById('editForm').reset();
+            updateEditFormVisibility();
+        }
+        
+        // Add event listener for action dropdown change
+        document.addEventListener('DOMContentLoaded', function() {
+            const actionSelect = document.getElementById('editAction');
+            if (actionSelect) {
+                actionSelect.addEventListener('change', updateEditFormVisibility);
+            }
+        });
 
         // Utility functions
         function escapeHtml(text) {

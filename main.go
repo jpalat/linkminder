@@ -47,6 +47,15 @@ type BookmarkUpdateRequest struct {
 	ProjectID int    `json:"projectId,omitempty"` // New field
 }
 
+type BookmarkFullUpdateRequest struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Description string `json:"description,omitempty"`
+	Action      string `json:"action,omitempty"`
+	ShareTo     string `json:"shareTo,omitempty"`
+	Topic       string `json:"topic,omitempty"`
+}
+
 type ProjectStat struct {
 	Topic       string `json:"topic"`
 	Count       int    `json:"count"`
@@ -1676,11 +1685,11 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		"remote_addr": r.RemoteAddr,
 	})
 	
-	if r.Method != http.MethodPatch {
-		log.Printf("Method not allowed: %s (expected PATCH)", r.Method)
+	if r.Method != http.MethodPatch && r.Method != http.MethodPut {
+		log.Printf("Method not allowed: %s (expected PATCH or PUT)", r.Method)
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
-			"expected": "PATCH",
+			"expected": "PATCH or PUT",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1708,39 +1717,72 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req BookmarkUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode JSON request: %v", err)
-		logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
-			"error": err.Error(),
+	if r.Method == http.MethodPut {
+		// Handle full bookmark update (PUT)
+		var req BookmarkFullUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("Failed to decode JSON request: %v", err)
+			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("Parsed full bookmark update request: ID=%d, Title=%s, URL=%s, Action=%s", 
+			bookmarkID, req.Title, req.URL, req.Action)
+
+		logStructured("INFO", "api", "Full bookmark update request parsed", map[string]interface{}{
+			"id":     bookmarkID,
+			"title":  req.Title,
+			"url":    req.URL,
+			"action": req.Action,
 		})
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
 
-	log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s", 
-		bookmarkID, req.Action, req.Topic)
+		if err := updateFullBookmarkInDB(bookmarkID, req); err != nil {
+			log.Printf("Failed to update bookmark in database: %v", err)
+			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
+				"error": err.Error(),
+				"id":    bookmarkID,
+			})
+			http.Error(w, "Failed to update bookmark", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Handle partial bookmark update (PATCH)
+		var req BookmarkUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("Failed to decode JSON request: %v", err)
+			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
 
-	logStructured("INFO", "api", "Bookmark update request parsed", map[string]interface{}{
-		"id":     bookmarkID,
-		"action": req.Action,
-		"topic":  req.Topic,
-	})
+		log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s", 
+			bookmarkID, req.Action, req.Topic)
 
-	if err := updateBookmarkInDB(bookmarkID, req); err != nil {
-		log.Printf("Failed to update bookmark in database: %v", err)
-		logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
-			"error": err.Error(),
-			"id":    bookmarkID,
+		logStructured("INFO", "api", "Bookmark update request parsed", map[string]interface{}{
+			"id":     bookmarkID,
+			"action": req.Action,
+			"topic":  req.Topic,
 		})
-		http.Error(w, "Failed to update bookmark", http.StatusInternalServerError)
-		return
+
+		if err := updateBookmarkInDB(bookmarkID, req); err != nil {
+			log.Printf("Failed to update bookmark in database: %v", err)
+			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
+				"error": err.Error(),
+				"id":    bookmarkID,
+			})
+			http.Error(w, "Failed to update bookmark", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	log.Printf("Successfully updated bookmark: %d", bookmarkID)
 	logStructured("INFO", "database", "Bookmark updated successfully", map[string]interface{}{
-		"id":     bookmarkID,
-		"action": req.Action,
+		"id": bookmarkID,
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
@@ -1831,6 +1873,116 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 	log.Printf("Successfully updated bookmark with ID: %d", id)
 	logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
 		"id":           id,
+		"rowsAffected": rowsAffected,
+	})
+	
+	return nil
+}
+
+func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
+	// Validate database connection first
+	if err := validateDB(); err != nil {
+		return fmt.Errorf("failed to validate database connection: %v", err)
+	}
+
+	log.Printf("Updating full bookmark in database: %d", id)
+	
+	// Validate required fields
+	if req.Title == "" || req.URL == "" {
+		return fmt.Errorf("title and URL are required fields")
+	}
+	
+	// Handle project assignment logic similar to partial update
+	var projectID sql.NullInt64
+	var actualTopic string
+	
+	if req.Topic != "" {
+		// Look for existing project with this topic/name
+		var existingProjectID int
+		err := db.QueryRow("SELECT id FROM projects WHERE name = ?", req.Topic).Scan(&existingProjectID)
+		if err == sql.ErrNoRows {
+			// Create new project
+			result, err := db.Exec(`
+				INSERT INTO projects (name, description, status, created_at, updated_at)
+				VALUES (?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+				req.Topic, fmt.Sprintf("Project for %s bookmarks", req.Topic))
+			if err != nil {
+				logStructured("ERROR", "database", "Failed to create new project", map[string]interface{}{
+					"error": err.Error(),
+					"topic": req.Topic,
+				})
+				return fmt.Errorf("failed to create new project: %v", err)
+			}
+			
+			newProjectID, err := result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("failed to get new project ID: %v", err)
+			}
+			
+			projectID = sql.NullInt64{Int64: newProjectID, Valid: true}
+			actualTopic = req.Topic
+			
+			logStructured("INFO", "database", "Created new project", map[string]interface{}{
+				"projectId": newProjectID,
+				"topic":     req.Topic,
+			})
+		} else if err != nil {
+			logStructured("ERROR", "database", "Failed to query existing project", map[string]interface{}{
+				"error": err.Error(),
+				"topic": req.Topic,
+			})
+			return fmt.Errorf("failed to query existing project: %v", err)
+		} else {
+			// Use existing project
+			projectID = sql.NullInt64{Int64: int64(existingProjectID), Valid: true}
+			actualTopic = req.Topic
+			
+			logStructured("INFO", "database", "Using existing project", map[string]interface{}{
+				"projectId": existingProjectID,
+				"topic":     req.Topic,
+			})
+		}
+	}
+	
+	// Update bookmark with all fields
+	updateSQL := `
+		UPDATE bookmarks 
+		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?
+		WHERE id = ?`
+	
+	result, err := db.Exec(updateSQL, 
+		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, id)
+	if err != nil {
+		logStructured("ERROR", "database", "Failed to execute full bookmark update", map[string]interface{}{
+			"error": err.Error(),
+			"id":    id,
+		})
+		return fmt.Errorf("failed to update bookmark: %v", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logStructured("ERROR", "database", "Failed to get rows affected", map[string]interface{}{
+			"error": err.Error(),
+			"id":    id,
+		})
+		return fmt.Errorf("failed to check update result: %v", err)
+	}
+	
+	if rowsAffected == 0 {
+		logStructured("WARN", "database", "No bookmark found with given ID", map[string]interface{}{
+			"id": id,
+		})
+		return fmt.Errorf("no bookmark found with ID %d", id)
+	}
+	
+	log.Printf("Successfully updated full bookmark with ID: %d", id)
+	logStructured("INFO", "database", "Full bookmark update completed", map[string]interface{}{
+		"id":           id,
+		"title":        req.Title,
+		"url":          req.URL,
+		"action":       req.Action,
+		"topic":        actualTopic,
 		"rowsAffected": rowsAffected,
 	})
 	
