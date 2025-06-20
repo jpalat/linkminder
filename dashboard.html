@@ -682,7 +682,7 @@
             }
 
             grid.innerHTML = data.activeProjects.map(project => `
-                <div class="project-card" onclick="openProjectDetail('${escapeHtml(project.topic)}')">
+                <div class="project-card" onclick="openProjectDetail(${project.id})">
                     <div class="project-title">${escapeHtml(project.topic)}</div>
                     <div class="project-meta">
                         ${project.linkCount} links • Updated ${formatDate(project.lastUpdated)}
@@ -732,8 +732,14 @@
             content.style.display = 'block';
         }
 
-        // Modal functions
-        function openProjectDetail(topic) {
+        // Navigation functions
+        function openProjectDetail(projectId) {
+            // Navigate to the enhanced project detail page using project ID
+            window.location.href = `/project-detail?id=${projectId}`;
+        }
+        
+        // Legacy modal functions (kept for backwards compatibility)
+        function openProjectModal(topic) {
             const modal = document.getElementById('projectModal');
             const loading = document.getElementById('projectDetailLoading');
             const content = document.getElementById('projectDetailContent');
