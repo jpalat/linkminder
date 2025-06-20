@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"net/url"
@@ -81,6 +82,7 @@ type TriageResponse struct {
 }
 
 type ActiveProject struct {
+	ID          int    `json:"id"`
 	Topic       string `json:"topic"`
 	LinkCount   int    `json:"linkCount"`
 	LastUpdated string `json:"lastUpdated"`
@@ -270,6 +272,7 @@ func main() {
 	
 	http.HandleFunc("/", handleDashboard)
 	http.HandleFunc("/projects", handleProjectsPage)
+	http.HandleFunc("/project-detail", handleProjectDetailPage)
 	http.HandleFunc("/bookmark", handleBookmark)
 	http.HandleFunc("/topics", handleTopics)
 	http.HandleFunc("/api/stats/summary", handleStatsSummary)
@@ -282,6 +285,7 @@ func main() {
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
 	log.Printf("  GET /projects - Projects page interface")
+	log.Printf("  GET /project-detail - Enhanced project detail page with filtering")
 	log.Printf("  POST /bookmark - Save a new bookmark")
 	log.Printf("  GET /topics - Get list of available topics")
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
@@ -335,7 +339,11 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		logStructured("ERROR", "api", "Failed to read dashboard file", map[string]interface{}{
 			"error": err.Error(),
 		})
-		http.Error(w, "Dashboard not available", http.StatusInternalServerError)
+		if os.IsNotExist(err) {
+			http.Error(w, "Dashboard not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Dashboard not available", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -371,7 +379,11 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 		logStructured("ERROR", "api", "Failed to read projects file", map[string]interface{}{
 			"error": err.Error(),
 		})
-		http.Error(w, "Projects page not available", http.StatusInternalServerError)
+		if os.IsNotExist(err) {
+			http.Error(w, "Projects page not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Projects page not available", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -379,6 +391,42 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	w.Write(projectsHTML)
 	
 	logStructured("INFO", "api", "Projects page served successfully", nil)
+}
+
+func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /project-detail from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Project detail page request received", map[string]interface{}{
+		"method": r.Method,
+		"remote_addr": r.RemoteAddr,
+		"user_agent": r.UserAgent(),
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method": r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Read the project detail HTML file
+	projectDetailHTML, err := os.ReadFile("project-detail.html")
+	if err != nil {
+		log.Printf("Failed to read project-detail.html: %v", err)
+		logStructured("ERROR", "api", "Failed to read project detail file", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Project detail page not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(projectDetailHTML)
+	
+	logStructured("INFO", "api", "Project detail page served successfully", nil)
 }
 
 func handleBookmark(w http.ResponseWriter, r *http.Request) {
@@ -855,11 +903,23 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	for rows.Next() {
 		var bookmark TriageBookmark
 		var timestamp string
+		var description sql.NullString
 		
-		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &bookmark.Description, &timestamp)
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan triage bookmark: %v", err)
 		}
+		
+		// Handle nullable description and escape HTML
+		if description.Valid {
+			bookmark.Description = html.EscapeString(description.String)
+		} else {
+			bookmark.Description = ""
+		}
+		
+		// Escape HTML in other user-provided fields
+		bookmark.Title = html.EscapeString(bookmark.Title)
+		bookmark.URL = html.EscapeString(bookmark.URL)
 		
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
@@ -888,10 +948,12 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 		}
 		
 		// Extract domain from URL
-		if u, err := url.Parse(bookmark.URL); err == nil {
-			bookmark.Domain = u.Hostname()
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host // Use Host instead of Hostname to preserve port
 		} else {
-			bookmark.Domain = "unknown"
+			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
 		
 		// Generate suggested action
@@ -1007,13 +1069,16 @@ func getActiveProjects() ([]ActiveProject, error) {
 
 	querySQL := `
 		SELECT 
-			topic,
-			COUNT(*) as linkCount,
-			MAX(timestamp) as lastUpdated
-		FROM bookmarks 
-		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
-		GROUP BY topic
-		ORDER BY MAX(timestamp) DESC
+			p.id,
+			p.name as topic,
+			COUNT(b.id) as linkCount,
+			COALESCE(MAX(b.timestamp), p.updated_at) as lastUpdated
+		FROM projects p
+		LEFT JOIN bookmarks b ON (b.project_id = p.id OR b.topic = p.name)
+		WHERE p.status = 'active'
+		GROUP BY p.id, p.name, p.updated_at
+		HAVING COUNT(b.id) > 0
+		ORDER BY MAX(COALESCE(b.timestamp, p.updated_at)) DESC
 	`
 	
 	rows, err := db.Query(querySQL)
@@ -1027,7 +1092,7 @@ func getActiveProjects() ([]ActiveProject, error) {
 		var project ActiveProject
 		var lastUpdated string
 		
-		err := rows.Scan(&project.Topic, &project.LinkCount, &lastUpdated)
+		err := rows.Scan(&project.ID, &project.Topic, &project.LinkCount, &lastUpdated)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan active project: %v", err)
 		}
@@ -1165,21 +1230,20 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 
 	projectDetail, err := getProjectDetail(topic)
 	if err != nil {
+		if strings.Contains(err.Error(), "project not found") {
+			log.Printf("Project not found: %s", topic)
+			logStructured("WARN", "api", "Project not found", map[string]interface{}{
+				"topic": topic,
+			})
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("Failed to get project detail for topic '%s': %v", topic, err)
 		logStructured("ERROR", "database", "Failed to get project detail", map[string]interface{}{
 			"error": err.Error(),
 			"topic": topic,
 		})
 		http.Error(w, "Failed to get project detail", http.StatusInternalServerError)
-		return
-	}
-
-	if projectDetail == nil {
-		log.Printf("Project not found: %s", topic)
-		logStructured("WARN", "api", "Project not found", map[string]interface{}{
-			"topic": topic,
-		})
-		http.Error(w, "Project not found", http.StatusNotFound)
 		return
 	}
 
@@ -1237,21 +1301,20 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 
 	projectDetail, err := getProjectDetailByID(projectID)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			log.Printf("Project not found with ID: %d", projectID)
+			logStructured("WARN", "api", "Project not found by ID", map[string]interface{}{
+				"project_id": projectID,
+			})
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("Failed to get project detail for ID %d: %v", projectID, err)
 		logStructured("ERROR", "database", "Failed to get project detail by ID", map[string]interface{}{
 			"project_id": projectID,
 			"error": err.Error(),
 		})
 		http.Error(w, "Failed to get project detail", http.StatusInternalServerError)
-		return
-	}
-
-	if projectDetail == nil {
-		log.Printf("Project not found with ID: %d", projectID)
-		logStructured("WARN", "api", "Project not found by ID", map[string]interface{}{
-			"project_id": projectID,
-		})
-		http.Error(w, "Project not found", http.StatusNotFound)
 		return
 	}
 
@@ -1307,7 +1370,7 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 		}
 		
 		if linkCount == 0 {
-			return nil, nil // Project not found
+			return nil, fmt.Errorf("project not found: %s", topic)
 		}
 		
 		if nullableLastUpdated.Valid {
@@ -1382,16 +1445,20 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
 		
-		// Handle nullable fields
+		// Handle nullable fields and escape HTML
 		if description.Valid {
-			bookmark.Description = description.String
+			bookmark.Description = html.EscapeString(description.String)
 		}
 		if content.Valid {
-			bookmark.Content = content.String
+			bookmark.Content = html.EscapeString(content.String)
 		}
 		if action.Valid {
-			bookmark.Action = action.String
+			bookmark.Action = html.EscapeString(action.String)
 		}
+		
+		// Escape HTML in other user-provided fields
+		bookmark.Title = html.EscapeString(bookmark.Title)
+		bookmark.URL = html.EscapeString(bookmark.URL)
 		
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
@@ -1420,10 +1487,12 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 		}
 		
 		// Extract domain from URL
-		if u, err := url.Parse(bookmark.URL); err == nil {
-			bookmark.Domain = u.Hostname()
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host // Use Host instead of Hostname to preserve port
 		} else {
-			bookmark.Domain = "unknown"
+			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
 		
 		bookmarks = append(bookmarks, bookmark)
@@ -1452,7 +1521,7 @@ func getProjectDetailByID(projectID int) (*ProjectDetailResponse, error) {
 	
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // Project not found
+			return nil, fmt.Errorf("project with ID %d not found", projectID)
 		}
 		return nil, fmt.Errorf("failed to get project info: %v", err)
 	}
@@ -1540,16 +1609,20 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
 		
-		// Handle nullable fields
+		// Handle nullable fields and escape HTML
 		if description.Valid {
-			bookmark.Description = description.String
+			bookmark.Description = html.EscapeString(description.String)
 		}
 		if content.Valid {
-			bookmark.Content = content.String
+			bookmark.Content = html.EscapeString(content.String)
 		}
 		if action.Valid {
-			bookmark.Action = action.String
+			bookmark.Action = html.EscapeString(action.String)
 		}
+		
+		// Escape HTML in other user-provided fields
+		bookmark.Title = html.EscapeString(bookmark.Title)
+		bookmark.URL = html.EscapeString(bookmark.URL)
 		
 		// Parse timestamp and calculate age
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
@@ -1568,10 +1641,12 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 		}
 		
 		// Extract domain from URL
-		if u, err := url.Parse(bookmark.URL); err == nil {
-			bookmark.Domain = u.Hostname()
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host // Use Host instead of Hostname to preserve port
 		} else {
-			bookmark.Domain = "unknown"
+			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
 		
 		bookmarks = append(bookmarks, bookmark)
