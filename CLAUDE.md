@@ -15,6 +15,7 @@ BookMinder API is a simple Go HTTP server that accepts bookmark submissions via 
   - `GET /topics` returns list of available topics
   - `GET /api/stats/summary` returns dashboard summary statistics
   - `GET /projects` serves enhanced projects page interface
+  - `GET /project-detail` serves interactive project detail page with filtering
   - `GET /api/projects/{topic}` returns detailed view of a specific project
   - `GET /api/projects/id/{id}` returns detailed view of a project by ID
 - **SQLite storage**: Data is stored in `bookmarks.db` with automatic timestamps
@@ -107,6 +108,20 @@ GET /api/projects/{topic}
 ```
 
 Returns detailed information about a specific project including all bookmarks within that topic. The topic parameter should be URL-encoded if it contains special characters.
+
+### Enhanced Project Detail Page
+```http
+GET /project-detail?topic={topicName}
+```
+
+Serves an interactive HTML page with client-side filtering and sorting capabilities:
+- **Text search** across titles, descriptions, and URLs
+- **Action filtering** (working, share, read-later, archived, irrelevant)
+- **Domain filtering** with auto-populated dropdown
+- **Date range filtering** with from/to date selectors
+- **Multi-field sorting** (date, title, domain, action)
+- **Real-time results** with instant filtering
+- **Responsive design** for desktop and mobile
 
 **Response:**
 ```json
