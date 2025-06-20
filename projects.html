@@ -436,7 +436,7 @@
         async function createProjectCard(project) {
             const card = document.createElement('div');
             card.className = `project-card ${project.status}`;
-            card.onclick = () => viewProject(project.topic);
+            card.onclick = () => viewProject(project.id);
             
             const statusClass = `status-${project.status}`;
             
@@ -473,13 +473,13 @@
                 </div>
                 
                 <div class="project-actions">
-                    <button class="action-btn view" onclick="event.stopPropagation(); viewProject('${escapeHtml(project.topic)}')">
+                    <button class="action-btn view" onclick="event.stopPropagation(); viewProject(${project.id})">
                         👁️ View
                     </button>
-                    <button class="action-btn share" onclick="event.stopPropagation(); shareProject('${escapeHtml(project.topic)}')">
+                    <button class="action-btn share" onclick="event.stopPropagation(); shareProject(${project.id})">
                         📤 Share
                     </button>
-                    <button class="action-btn archive" onclick="event.stopPropagation(); archiveProject('${escapeHtml(project.topic)}')">
+                    <button class="action-btn archive" onclick="event.stopPropagation(); archiveProject(${project.id})">
                         📦 Archive
                     </button>
                 </div>
@@ -513,9 +513,9 @@
             document.getElementById('totalLinks').textContent = totalLinks;
         }
         
-        function viewProject(topic) {
-            // Navigate back to dashboard with project detail modal
-            window.location.href = `/?project=${encodeURIComponent(topic)}`;
+        function viewProject(projectId) {
+            // Navigate to the enhanced project detail page
+            window.location.href = `/project-detail?id=${projectId}`;
         }
         
         function shareProject(projectId) {
