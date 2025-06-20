@@ -32,6 +32,44 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .navigation {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .nav-btn {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            color: #4a5568;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .nav-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            color: #2d3748;
+            transform: translateY(-1px);
+        }
+        
+        .nav-btn:active {
+            transform: translateY(0);
+        }
+        
         .project-title {
             font-size: 2rem;
             font-weight: 700;
@@ -269,6 +307,23 @@
                 padding: 16px;
             }
             
+            .header-top {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+            
+            .navigation {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .nav-btn {
+                flex: 1;
+                min-width: 100px;
+                justify-content: center;
+            }
+            
             .project-meta {
                 flex-direction: column;
                 gap: 12px;
@@ -294,6 +349,13 @@
 <body>
     <div class="container">
         <div class="header">
+            <div class="header-top">
+                <div class="navigation">
+                    <button class="nav-btn" onclick="goBack()">← Back</button>
+                    <button class="nav-btn" onclick="goToDashboard()">🏠 Dashboard</button>
+                    <button class="nav-btn" onclick="goToProjects()">📂 All Projects</button>
+                </div>
+            </div>
             <h1 class="project-title" id="projectTitle">Loading...</h1>
             <div class="project-meta">
                 <div class="meta-item">
@@ -676,6 +738,25 @@
             } catch (e) {
                 return dateString;
             }
+        }
+        
+        // Navigation functions
+        function goBack() {
+            // Go back to previous page in browser history
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                // Fallback to dashboard if no history
+                goToDashboard();
+            }
+        }
+        
+        function goToDashboard() {
+            window.location.href = '/';
+        }
+        
+        function goToProjects() {
+            window.location.href = '/projects';
         }
     </script>
 </body>
