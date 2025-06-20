@@ -656,21 +656,21 @@
             const bookmarksHTML = filteredBookmarks.map(bookmark => `
                 <div class="bookmark-card">
                     <div class="bookmark-header">
-                        <a href="${bookmark.url}" target="_blank" class="bookmark-title">${escapeHtml(bookmark.title)}</a>
+                        <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-title">${escapeHtml(bookmark.title)}</a>
                         <div class="bookmark-actions">
-                            ${bookmark.action ? `<span class="action-badge action-${bookmark.action}">${bookmark.action}</span>` : ''}
+                            ${bookmark.action ? `<span class="action-badge action-${bookmark.action}">${escapeHtml(bookmark.action)}</span>` : ''}
                         </div>
                     </div>
                     
                     <div class="bookmark-meta">
-                        <span>🌐 ${bookmark.domain || 'Unknown'}</span>
+                        <span>🌐 ${escapeHtml(bookmark.domain || 'Unknown')}</span>
                         <span>📅 ${formatDate(bookmark.timestamp)}</span>
-                        <span>⏰ ${bookmark.age}</span>
+                        <span>⏰ ${escapeHtml(bookmark.age || '')}</span>
                     </div>
                     
                     ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
                     
-                    <a href="${bookmark.url}" target="_blank" class="bookmark-url">${bookmark.url}</a>
+                    <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
                 </div>
             `).join('');
 

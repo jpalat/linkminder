@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 	"net/url"
@@ -920,23 +919,21 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 			return nil, fmt.Errorf("failed to scan triage bookmark: %v", err)
 		}
 		
-		// Handle nullable description and escape HTML
+		// Handle nullable description (store raw data)
 		if description.Valid {
-			bookmark.Description = html.EscapeString(description.String)
+			bookmark.Description = description.String
 		} else {
 			bookmark.Description = ""
 		}
 		
-		// Handle nullable topic and escape HTML
+		// Handle nullable topic (store raw data)
 		if topic.Valid {
-			bookmark.Topic = html.EscapeString(topic.String)
+			bookmark.Topic = topic.String
 		} else {
 			bookmark.Topic = ""
 		}
 		
-		// Escape HTML in other user-provided fields
-		bookmark.Title = html.EscapeString(bookmark.Title)
-		bookmark.URL = html.EscapeString(bookmark.URL)
+		// Store raw data (HTML escaping will be handled by frontend for display)
 		
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
@@ -1462,20 +1459,18 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
 		
-		// Handle nullable fields and escape HTML
+		// Handle nullable fields (store raw data)
 		if description.Valid {
-			bookmark.Description = html.EscapeString(description.String)
+			bookmark.Description = description.String
 		}
 		if content.Valid {
-			bookmark.Content = html.EscapeString(content.String)
+			bookmark.Content = content.String
 		}
 		if action.Valid {
-			bookmark.Action = html.EscapeString(action.String)
+			bookmark.Action = action.String
 		}
 		
-		// Escape HTML in other user-provided fields
-		bookmark.Title = html.EscapeString(bookmark.Title)
-		bookmark.URL = html.EscapeString(bookmark.URL)
+		// Store raw data (HTML escaping will be handled by frontend for display)
 		
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
@@ -1626,20 +1621,18 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
 		
-		// Handle nullable fields and escape HTML
+		// Handle nullable fields (store raw data)
 		if description.Valid {
-			bookmark.Description = html.EscapeString(description.String)
+			bookmark.Description = description.String
 		}
 		if content.Valid {
-			bookmark.Content = html.EscapeString(content.String)
+			bookmark.Content = content.String
 		}
 		if action.Valid {
-			bookmark.Action = html.EscapeString(action.String)
+			bookmark.Action = action.String
 		}
 		
-		// Escape HTML in other user-provided fields
-		bookmark.Title = html.EscapeString(bookmark.Title)
-		bookmark.URL = html.EscapeString(bookmark.URL)
+		// Store raw data (HTML escaping will be handled by frontend for display)
 		
 		// Parse timestamp and calculate age
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {

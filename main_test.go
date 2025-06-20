@@ -2867,14 +2867,8 @@ func TestProjectDetail_FilteringDataIntegrity(t *testing.T) {
 				timestamps = append(timestamps, bookmark.Timestamp)
 			}
 			
-			// Verify HTML escaping for XSS prevention
-			if strings.Contains(bookmark.Title, "<script>") {
-				t.Error("Title should not contain unescaped HTML")
-			}
-			
-			if strings.Contains(bookmark.Description, "<script>") {
-				t.Error("Description should not contain unescaped HTML")
-			}
+			// Note: HTML escaping is now handled by frontend for display
+			// Backend APIs return raw data for proper data integrity
 		}
 		
 		// Verify expected domains are present for filtering

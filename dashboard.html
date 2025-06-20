@@ -828,15 +828,15 @@
                     <div class="triage-info">
                         <div class="triage-title">${escapeHtml(bookmark.title)}</div>
                         <div class="triage-meta">
-                            <span>${bookmark.domain}</span>
-                            <span>${bookmark.age}</span>
-                            <span>Suggested: ${bookmark.suggested}</span>
+                            <span>${escapeHtml(bookmark.domain || '')}</span>
+                            <span>${escapeHtml(bookmark.age || '')}</span>
+                            <span>Suggested: ${escapeHtml(bookmark.suggested || '')}</span>
                         </div>
                     </div>
                     <div class="triage-actions">
-                        <button class="btn btn-preview" onclick="previewBookmark('${bookmark.url}', \`${bookmark.title.replace(/`/g, '\\`')}\`, ${bookmark.id})">👁️ Preview</button>
+                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
                         <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
-                        <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id}, '${bookmark.topic || ''}')">Working</button>
+                        <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id}, '${escapeHtml(bookmark.topic || '').replace(/'/g, '\\\'').replace(/"/g, '\\"')}')">Working</button>
                         <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
                         <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
                     </div>
@@ -926,12 +926,12 @@
                 bookmarksContainer.innerHTML = project.bookmarks.map(bookmark => `
                     <div class="bookmark-item">
                         <div class="bookmark-title">${escapeHtml(bookmark.title)}</div>
-                        <a href="${bookmark.url}" target="_blank" class="bookmark-url">${bookmark.url}</a>
+                        <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
                         ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
                         <div class="bookmark-meta">
-                            <span>${bookmark.domain}</span>
-                            <span>${bookmark.age}</span>
-                            <span>Action: ${bookmark.action || 'none'}</span>
+                            <span>${escapeHtml(bookmark.domain || '')}</span>
+                            <span>${escapeHtml(bookmark.age || '')}</span>
+                            <span>Action: ${escapeHtml(bookmark.action || 'none')}</span>
                         </div>
                         <div class="bookmark-actions">
                             <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>

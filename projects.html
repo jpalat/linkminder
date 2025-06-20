@@ -450,7 +450,7 @@
                     recentBookmarksHtml = recentBookmarks.map(bookmark => `
                         <div class="bookmark-item">
                             <div class="bookmark-title-small">${escapeHtml(bookmark.title)}</div>
-                            <div class="bookmark-url-small">${getDomain(bookmark.url)}</div>
+                            <div class="bookmark-url-small">${escapeHtml(getDomain(bookmark.url))}</div>
                         </div>
                     `).join('') || '<div class="bookmark-item">No bookmarks yet</div>';
                 }
