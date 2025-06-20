@@ -32,8 +32,23 @@ func setupTestDB(t *testing.T) *TestDB {
 		t.Fatalf("Failed to open test database: %v", err)
 	}
 	
+	// Create the projects table
+	createProjectsTableSQL := `
+	CREATE TABLE IF NOT EXISTS projects (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		description TEXT,
+		status TEXT DEFAULT 'active',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
+	
+	if _, err = db.Exec(createProjectsTableSQL); err != nil {
+		t.Fatalf("Failed to create test projects table: %v", err)
+	}
+	
 	// Create the bookmarks table
-	createTableSQL := `
+	createBookmarksTableSQL := `
 	CREATE TABLE IF NOT EXISTS bookmarks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -43,11 +58,12 @@ func setupTestDB(t *testing.T) *TestDB {
 		content TEXT,
 		action TEXT,
 		shareTo TEXT,
-		topic TEXT
+		topic TEXT,
+		project_id INTEGER REFERENCES projects(id)
 	);`
 	
-	if _, err = db.Exec(createTableSQL); err != nil {
-		t.Fatalf("Failed to create test table: %v", err)
+	if _, err = db.Exec(createBookmarksTableSQL); err != nil {
+		t.Fatalf("Failed to create test bookmarks table: %v", err)
 	}
 	
 	return &TestDB{db: db, dbPath: dbPath}
