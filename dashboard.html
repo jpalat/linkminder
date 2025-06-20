@@ -350,40 +350,59 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
-        .modal-header {
+        .modal-footer {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1.5rem;
+            padding: 1rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
         }
 
         .modal-title {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 600;
             margin: 0;
+            color: white;
         }
 
-        .close {
-            background: none;
+        .footer-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.2);
             border: none;
             color: white;
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             cursor: pointer;
-            padding: 0.5rem;
+            padding: 8px;
             border-radius: 6px;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
         }
 
-        .close:hover {
-            background: rgba(255, 255, 255, 0.1);
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .icon-btn:active {
+            transform: scale(0.95);
         }
 
         .modal-body {
-            padding: 1.5rem;
-            max-height: 60vh;
-            overflow-y: auto;
+            padding: 0;
+            max-height: 70vh;
+            overflow: hidden;
         }
 
         .project-detail-header {
@@ -449,19 +468,11 @@
             margin-top: 0.5rem;
         }
 
-        .preview-controls {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
         .preview-container {
             position: relative;
             background: #f7fafc;
-            border-radius: 8px;
             overflow: hidden;
+            height: 100%;
         }
 
         #previewFrame {
@@ -508,10 +519,6 @@
                 gap: 1rem;
             }
             
-            .preview-controls {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
             
             #previewFrame {
                 height: 400px;
@@ -521,6 +528,20 @@
                 width: 95%;
                 margin: 1% auto;
                 max-height: 95vh;
+            }
+            
+            .modal-footer {
+                padding: 0.75rem 1rem;
+            }
+            
+            .modal-title {
+                font-size: 1.1rem;
+            }
+            
+            .icon-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 1.1rem;
             }
         }
     </style>
@@ -606,17 +627,16 @@
     <!-- Preview Modal -->
     <div id="previewModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="previewTitle">Preview</h2>
-                <button class="close" onclick="closePreviewModal()">&times;</button>
-            </div>
             <div class="modal-body">
-                <div class="preview-controls">
-                    <button class="btn btn-primary" id="openInNewWindow" onclick="openInNewWindow()">🔗 Open in New Window</button>
-                    <button class="btn btn-secondary" onclick="closePreviewModal()">Close</button>
-                </div>
                 <div class="preview-container">
-                    <iframe id="previewFrame" src="" frameborder="0" style="width: 100%; height: 500px; border-radius: 8px;"></iframe>
+                    <iframe id="previewFrame" src="" frameborder="0" style="width: 100%; height: 500px;"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <h2 class="modal-title" id="previewTitle">Preview</h2>
+                <div class="footer-actions">
+                    <button class="icon-btn" id="openInNewWindow" onclick="openInNewWindow()" title="Open in New Window">↗</button>
+                    <button class="icon-btn close" onclick="closePreviewModal()" title="Close">&times;</button>
                 </div>
             </div>
         </div>
@@ -985,9 +1005,9 @@
                 <div class="preview-error">
                     <h3>Preview Not Available</h3>
                     <p>${message}</p>
-                    <button class="btn btn-primary" onclick="openInNewWindow()" style="margin-top: 1rem;">
-                        🔗 Open in New Window Instead
-                    </button>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; color: #718096;">
+                        Use the ↗ button in the footer to open in a new window.
+                    </p>
                 </div>
             `;
         }
