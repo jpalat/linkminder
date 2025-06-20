@@ -14,9 +14,12 @@ BookMinder API is a simple Go HTTP server that accepts bookmark submissions via 
   - `POST /bookmark` accepts JSON with `url`, `title`, and optional fields
   - `GET /topics` returns list of available topics
   - `GET /api/stats/summary` returns dashboard summary statistics
+  - `GET /projects` serves enhanced projects page interface
   - `GET /api/projects/{topic}` returns detailed view of a specific project
+  - `GET /api/projects/id/{id}` returns detailed view of a project by ID
 - **SQLite storage**: Data is stored in `bookmarks.db` with automatic timestamps
-- **Dependencies**: Uses SQLite driver (`github.com/mattn/go-sqlite3`)
+- **Database migrations**: Uses `golang-migrate/migrate` for schema versioning
+- **Dependencies**: Uses SQLite driver (`github.com/mattn/go-sqlite3`) and migration library
 
 ## Common Development Commands
 
@@ -57,12 +60,24 @@ The API accepts JSON requests with this structure:
   "content": "optional string",
   "action": "optional string (read-later, working, share, archived, irrelevant)",
   "shareTo": "optional string (for share action)",
-  "topic": "optional string (for working action)"
+  "topic": "optional string (legacy - for working action)",
+  "projectId": "optional integer (preferred - for working action)"
 }
 ```
 
 SQLite database schema:
 ```sql
+-- Projects table (normalized)
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Bookmarks table (with project relationship)
 CREATE TABLE bookmarks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -72,7 +87,8 @@ CREATE TABLE bookmarks (
     content TEXT,
     action TEXT,
     shareTo TEXT,
-    topic TEXT
+    topic TEXT,  -- Legacy support
+    project_id INTEGER REFERENCES projects(id)  -- New normalized reference
 );
 ```
 
@@ -178,6 +194,41 @@ The API includes comprehensive unit tests covering:
 - HTTP handlers tested with `httptest` package
 - Both success and error scenarios covered
 - Project functionality comprehensively tested
+
+## Database Migrations
+
+The API uses `golang-migrate/migrate` for database schema versioning:
+
+### Migration Files
+- Located in `migrations/` directory
+- Numbered sequentially: `000001_description.up.sql` and `000001_description.down.sql`
+- Applied automatically on server startup
+- Current migrations:
+  1. **Initial schema**: Creates bookmarks table
+  2. **Projects table**: Adds normalized projects table
+  3. **Project ID column**: Adds foreign key to bookmarks
+  4. **Data migration**: Migrates existing topics to projects
+
+### Migration Commands
+```bash
+# Check migration status (requires migrate CLI)
+migrate -path migrations -database sqlite3://bookmarks.db version
+
+# Force migration version (if needed)
+migrate -path migrations -database sqlite3://bookmarks.db force 4
+
+# Rollback to specific version
+migrate -path migrations -database sqlite3://bookmarks.db down 1
+```
+
+### Adding New Migrations
+```bash
+# Create new migration files
+migrate create -ext sql -dir migrations -seq description_of_change
+
+# Edit the generated .up.sql and .down.sql files
+# Restart server to apply migrations automatically
+```
 
 ## Logging
 
