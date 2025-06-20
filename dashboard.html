@@ -498,7 +498,10 @@
         <div class="section" id="projectsSection">
             <div class="section-header">
                 <h2 class="section-title">Active Projects</h2>
-                <button class="btn btn-primary" onclick="refreshProjects()">Refresh</button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="/projects" class="btn btn-secondary">View All Projects</a>
+                    <button class="btn btn-primary" onclick="refreshProjects()">Refresh</button>
+                </div>
             </div>
             <div class="section-content">
                 <div class="loading" id="projectsLoading">Loading projects...</div>
