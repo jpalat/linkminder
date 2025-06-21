@@ -256,6 +256,7 @@ import PreviewModal from '@/components/modals/PreviewModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
 import type { Bookmark } from '@/types'
+import { ServerStatus } from '@/utils/serverStatus'
 
 const bookmarkStore = useBookmarkStore()
 const {
@@ -490,6 +491,17 @@ const moveSelectedTo = (action: string) => {
 
 // Lifecycle
 onMounted(async () => {
+  // Debug: Log current server configuration
+  console.log('🌐 API Server URL:', ServerStatus.getCurrentServerURL())
+  
+  // Check server health
+  const healthCheck = await ServerStatus.checkServerHealth()
+  console.log('🏥 Server Health:', healthCheck)
+  
+  if (!healthCheck.isConnected) {
+    console.warn('⚠️  Server not reachable, will use mock data fallback')
+  }
+  
   await loadBookmarks()
   await loadDashboardStats()
 })
