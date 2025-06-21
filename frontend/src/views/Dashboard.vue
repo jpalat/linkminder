@@ -38,18 +38,18 @@
             />
           </div>
           <div class="header-actions">
-            <AppButton 
-              variant="secondary" 
+            <button 
+              class="header-btn"
               @click="toggleBatchMode"
             >
               {{ batchMode ? 'Cancel' : 'Select' }}
-            </AppButton>
-            <AppButton 
-              variant="primary"
+            </button>
+            <button 
+              class="header-btn header-btn-primary"
               @click="showAddModal = true"
             >
               + Add
-            </AppButton>
+            </button>
           </div>
         </div>
       </div>
@@ -87,7 +87,7 @@
                 <AppButton size="sm" variant="secondary" @click="showFilters = !showFilters">
                   Filter
                 </AppButton>
-                <AppButton size="sm" variant="secondary">
+                <AppButton size="sm" variant="secondary" @click="showSort = !showSort">
                   Sort
                 </AppButton>
                 <AppButton size="sm" variant="primary" @click="loadBookmarks" :loading="loading">
@@ -99,10 +99,20 @@
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
             
+            <!-- Sort Panel -->
+            <SortPanel 
+              v-if="showSort" 
+              :current-sort="currentSort"
+              @sort-change="setSortOrder"
+            />
+            
             <div class="section-content">
               <BookmarkList
                 :bookmarks="filteredBookmarks"
                 :batch-mode="batchMode"
+                :total-count="totalBookmarksForCurrentTab"
+                :show-results-count="hasActiveFilters"
+                :loading="loading"
                 @toggle-selection="toggleSelection"
                 @preview="handlePreview"
                 @edit="handleEdit"
@@ -203,6 +213,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import BookmarkList from '@/components/bookmark/BookmarkList.vue'
 import FilterPanel from '@/components/filters/FilterPanel.vue'
+import SortPanel from '@/components/ui/SortPanel.vue'
 import ProjectList from '@/components/project/ProjectList.vue'
 import ShareGroups from '@/components/share/ShareGroups.vue'
 
@@ -214,7 +225,10 @@ const {
   filteredBookmarks,
   dashboardStats,
   shareGroups,
-  loading
+  loading,
+  bookmarks,
+  filters,
+  currentSort
 } = storeToRefs(bookmarkStore)
 
 const {
@@ -224,12 +238,14 @@ const {
   clearSelection,
   moveBookmarks,
   loadBookmarks,
-  updateFilters
+  updateFilters,
+  setSortOrder
 } = bookmarkStore
 
 // Local state
 const searchQuery = ref('')
 const showFilters = ref(false)
+const showSort = ref(false)
 const showAddModal = ref(false)
 
 // Computed
@@ -261,6 +277,25 @@ const tabs = computed(() => [
 ])
 
 const projectStats = computed(() => dashboardStats.value.projectStats)
+
+const hasActiveFilters = computed(() => {
+  return Object.values(filters.value).some(value => value && value.trim() !== '')
+})
+
+const totalBookmarksForCurrentTab = computed(() => {
+  switch (currentTab.value) {
+    case 'triage':
+      return bookmarks.value.filter(b => !b.action || b.action === 'read-later').length
+    case 'projects':
+      return bookmarks.value.filter(b => b.action === 'working').length
+    case 'share':
+      return bookmarks.value.filter(b => b.action === 'share').length
+    case 'archive':
+      return bookmarks.value.filter(b => b.action === 'archived').length
+    default:
+      return 0
+  }
+})
 
 // Methods
 const handleSearch = (query: string) => {
@@ -297,13 +332,13 @@ onMounted(() => {
 
 /* Header */
 .header {
-  background: white;
-  border-bottom: 1px solid var(--border-light);
-  padding: var(--spacing-lg) var(--spacing-xl);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px var(--spacing-xl);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
@@ -332,15 +367,15 @@ onMounted(() => {
 }
 
 .stat-number {
-  font-size: var(--font-size-2xl);
+  font-size: 1.5rem;
   font-weight: var(--font-weight-bold);
   display: block;
-  color: var(--color-gray-800);
+  color: white;
 }
 
 .stat-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-600);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.9);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -358,6 +393,32 @@ onMounted(() => {
 .header-actions {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+.header-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 8px var(--spacing-lg);
+  border-radius: 20px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.header-btn-primary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-primary);
+}
+
+.header-btn-primary:hover {
+  background: white;
 }
 
 /* Tab Navigation */
@@ -449,6 +510,21 @@ onMounted(() => {
 
 .batch-count {
   font-weight: var(--font-weight-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.batch-count::before {
+  content: '✓';
+  background: rgba(255, 255, 255, 0.2);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
 }
 
 .batch-actions {
