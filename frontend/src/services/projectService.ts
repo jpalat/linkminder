@@ -1,5 +1,5 @@
 import { apiClient, type ApiResponse } from './api'
-import type { Project, Bookmark } from '@/types'
+import type { Project, Bookmark, ProjectDetail } from '@/types'
 
 // API response types matching the Go backend
 export interface ProjectDetailResponse {
@@ -56,6 +56,27 @@ class ProjectService {
     const encodedTopic = encodeURIComponent(topic)
     const response = await apiClient.get<ProjectDetailResponse>(`/api/projects/${encodedTopic}`)
     return response.data
+  }
+
+  /**
+   * Get project detail view - frontend-friendly version
+   */
+  async getProjectDetail(topicOrId: string): Promise<ProjectDetail> {
+    // Check if it's a numeric ID or topic name
+    const isNumericId = /^\d+$/.test(topicOrId)
+    
+    const response = isNumericId 
+      ? await this.getProjectById(parseInt(topicOrId))
+      : await this.getProjectByTopic(topicOrId)
+
+    return {
+      topic: response.topic,
+      linkCount: response.linkCount,
+      lastUpdated: response.lastUpdated,
+      status: response.status,
+      progress: response.progress,
+      bookmarks: response.bookmarks.map(bookmark => this.transformBackendBookmark(bookmark))
+    }
   }
 
   /**
