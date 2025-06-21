@@ -248,28 +248,14 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       // Load dashboard stats first to get overall counts
       const stats = await bookmarkService.getDashboardStats()
       
-      // Load triage queue (bookmarks needing action)
-      const triageResponse = await bookmarkService.getTriageQueue(100) // Get more items for better filtering
+      // Load ALL bookmarks (triage + share + working + archived)
+      const allBookmarks = await bookmarkService.getAllBookmarks()
       
       // Load project data
       const projectsResponse = await projectService.getProjects()
       
-      // Transform and combine data
-      const triageBookmarks = triageResponse.bookmarks.map(bookmark => ({
-        id: String(bookmark.id),
-        url: bookmark.url,
-        title: bookmark.title,
-        description: bookmark.description,
-        content: bookmark.content,
-        action: bookmark.action as any,
-        timestamp: bookmark.timestamp,
-        domain: bookmark.domain || extractDomain(bookmark.url),
-        age: bookmark.age || calculateAge(bookmark.timestamp)
-      }))
-      
-      // For now, we'll use the triage bookmarks as our main dataset
-      // In a full implementation, we'd have a unified bookmarks endpoint
-      bookmarks.value = triageBookmarks
+      // Use the complete bookmark dataset
+      bookmarks.value = allBookmarks
       
       // Update projects
       projects.value = projectsResponse.projects?.map(project => 
