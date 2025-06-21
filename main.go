@@ -279,17 +279,17 @@ func main() {
 	log.Printf("Registering HTTP handlers")
 	logStructured("INFO", "startup", "Registering HTTP handlers", nil)
 	
-	http.HandleFunc("/", handleDashboard)
-	http.HandleFunc("/projects", handleProjectsPage)
-	http.HandleFunc("/project-detail", handleProjectDetailPage)
-	http.HandleFunc("/bookmark", handleBookmark)
-	http.HandleFunc("/topics", handleTopics)
-	http.HandleFunc("/api/stats/summary", handleStatsSummary)
-	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
-	http.HandleFunc("/api/projects", handleProjects)
-	http.HandleFunc("/api/projects/", handleProjectDetail)
-	http.HandleFunc("/api/projects/id/", handleProjectByID)
-	http.HandleFunc("/api/bookmarks/", handleBookmarkUpdate)
+	http.HandleFunc("/", withCORS(handleDashboard))
+	http.HandleFunc("/projects", withCORS(handleProjectsPage))
+	http.HandleFunc("/project-detail", withCORS(handleProjectDetailPage))
+	http.HandleFunc("/bookmark", withCORS(handleBookmark))
+	http.HandleFunc("/topics", withCORS(handleTopics))
+	http.HandleFunc("/api/stats/summary", withCORS(handleStatsSummary))
+	http.HandleFunc("/api/bookmarks/triage", withCORS(handleTriageQueue))
+	http.HandleFunc("/api/projects", withCORS(handleProjects))
+	http.HandleFunc("/api/projects/", withCORS(handleProjectDetail))
+	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
+	http.HandleFunc("/api/bookmarks/", withCORS(handleBookmarkUpdate))
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
@@ -320,6 +320,31 @@ func main() {
 		})
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+// CORSMiddleware adds CORS headers to all responses
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
+
+		// Handle preflight OPTIONS requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	}
+}
+
+// Helper function to wrap handlers with CORS
+func withCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return corsMiddleware(handler)
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
