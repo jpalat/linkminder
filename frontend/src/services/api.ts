@@ -194,7 +194,12 @@ export function isSuccessResponse<T>(response: ApiResponse<T>): boolean {
 
 // Environment configuration
 export function getApiBaseURL(): string {
-  // In a real application, this would come from environment variables
+  // Check for Vite environment variable first
+  const envApiUrl = import.meta.env?.VITE_API_BASE_URL
+  if (envApiUrl) {
+    return envApiUrl
+  }
+  
   if (typeof window !== 'undefined') {
     // Browser environment
     const hostname = window.location.hostname
