@@ -1,31 +1,10 @@
 <template>
   <div class="dashboard">
-    <!-- Header with Search -->
+    <!-- Minimal Header -->
     <header class="header">
       <div class="header-content">
         <div class="header-left">
-          <div class="stats-grid">
-            <div class="stat-item">
-              <span class="stat-number">{{ dashboardStats.needsTriage }}</span>
-              <span class="stat-label">Triage</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ dashboardStats.readyToShare }}</span>
-              <span class="stat-label">Share</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ dashboardStats.activeProjects }}</span>
-              <span class="stat-label">Projects</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ dashboardStats.archived }}</span>
-              <span class="stat-label">Archived</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ dashboardStats.totalBookmarks }}</span>
-              <span class="stat-label">Total</span>
-            </div>
-          </div>
+          <h1 class="app-title">BookMinder</h1>
         </div>
         
         <div class="header-right">
@@ -33,7 +12,8 @@
             <AppInput
               v-model="searchQuery"
               icon="🔍"
-              placeholder="Search bookmarks, topics, domains..."
+              placeholder="Search bookmarks..."
+              class="compact-search"
               @input="handleSearch"
             />
           </div>
@@ -41,14 +21,15 @@
             <button 
               class="header-btn"
               @click="toggleBatchMode"
+              :class="{ active: batchMode }"
             >
-              {{ batchMode ? 'Cancel' : 'Select' }}
+              {{ batchMode ? '✕' : '☑' }}
             </button>
             <button 
               class="header-btn header-btn-primary"
               @click="showAddModal = true"
             >
-              + Add
+              +
             </button>
           </div>
         </div>
@@ -514,15 +495,15 @@ onMounted(async () => {
   flex-direction: column;
 }
 
-/* Header */
+/* Minimal Header */
 .header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 12px var(--spacing-xl);
+  background: white;
+  border-bottom: 1px solid var(--border-light);
+  padding: var(--spacing-md) var(--spacing-xl);
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .header-content {
@@ -531,78 +512,78 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-2xl);
+  gap: var(--spacing-xl);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2xl);
 }
 
-.stats-grid {
-  display: flex;
-  gap: var(--spacing-xl);
-}
-
-.stat-item {
-  text-align: center;
-  min-width: 50px;
-}
-
-.stat-number {
-  font-size: 1.5rem;
+.app-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
-  display: block;
-  color: white;
-}
-
-.stat-label {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.9);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--color-gray-800);
+  letter-spacing: -0.025em;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 .search-container {
-  min-width: 300px;
+  min-width: 260px;
+}
+
+.compact-search {
+  font-size: var(--font-size-sm);
 }
 
 .header-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .header-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
-  padding: 8px var(--spacing-lg);
-  border-radius: 20px;
-  font-size: var(--font-size-base);
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: 1px solid var(--border-light);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: var(--transition-fast);
+  min-width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .header-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
+  background: var(--color-gray-200);
+  border-color: var(--color-gray-300);
+}
+
+.header-btn.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-color: var(--color-primary);
 }
 
 .header-btn-primary {
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
 }
 
 .header-btn-primary:hover {
-  background: white;
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
 }
 
 /* Tab Navigation */
@@ -724,9 +705,13 @@ onMounted(async () => {
 }
 
 @media (max-width: 968px) {
+  .header {
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+  
   .header-content {
     flex-direction: column;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-md);
   }
   
   .header-left {
@@ -736,8 +721,12 @@ onMounted(async () => {
   
   .header-right {
     order: 1;
-    flex-direction: column;
-    gap: var(--spacing-md);
+    width: 100%;
+  }
+  
+  .search-container {
+    min-width: auto;
+    flex: 1;
   }
   
   .tab-nav-content {
@@ -755,12 +744,13 @@ onMounted(async () => {
 }
 
 @media (max-width: 640px) {
-  .stats-grid {
-    gap: var(--spacing-md);
+  .header {
+    padding: var(--spacing-sm) var(--spacing-md);
   }
   
-  .stat-number {
-    font-size: var(--font-size-xl);
+  .header-right {
+    flex-direction: column;
+    gap: var(--spacing-sm);
   }
   
   .main-content {
@@ -769,6 +759,10 @@ onMounted(async () => {
   
   .search-container {
     min-width: 200px;
+  }
+  
+  .app-title {
+    font-size: var(--font-size-lg);
   }
 }
 </style>
