@@ -11,6 +11,7 @@ export interface Bookmark {
   timestamp: string
   domain?: string
   age?: string
+  tags?: string[]
 }
 
 export interface Project {
