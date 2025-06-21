@@ -95,8 +95,6 @@ const formatDate = (dateString: string) => {
 .projects-grid {
   display: grid;
   gap: var(--spacing-lg);
-  max-height: 400px;
-  overflow-y: auto;
 }
 
 .project-card {

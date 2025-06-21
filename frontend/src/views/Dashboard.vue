@@ -1,10 +1,23 @@
 <template>
   <div class="dashboard">
-    <!-- Minimal Header -->
+    <!-- Header with Tabs -->
     <header class="header">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="app-title">BookMinder</h1>
+          <!-- Tab Navigation -->
+          <nav class="tab-nav">
+            <button
+              v-for="tab in tabs"
+              :key="tab.key"
+              :class="['tab-button', { active: currentTab === tab.key }]"
+              @click="setCurrentTab(tab.key)"
+            >
+              {{ tab.icon }} {{ tab.label }}
+              <span v-if="tab.count !== undefined" class="tab-count">
+                {{ tab.count }}
+              </span>
+            </button>
+          </nav>
         </div>
         
         <div class="header-right">
@@ -35,23 +48,6 @@
         </div>
       </div>
     </header>
-
-    <!-- Tab Navigation -->
-    <nav class="tab-nav">
-      <div class="tab-nav-content">
-        <button
-          v-for="tab in tabs"
-          :key="tab.key"
-          :class="['tab-button', { active: currentTab === tab.key }]"
-          @click="setCurrentTab(tab.key)"
-        >
-          {{ tab.icon }} {{ tab.label }}
-          <span v-if="tab.count !== undefined" class="tab-count">
-            {{ tab.count }}
-          </span>
-        </button>
-      </div>
-    </nav>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -490,9 +486,10 @@ onMounted(async () => {
 
 <style scoped>
 .dashboard {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Minimal Header */
@@ -518,14 +515,7 @@ onMounted(async () => {
 .header-left {
   display: flex;
   align-items: center;
-}
-
-.app-title {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-gray-800);
-  letter-spacing: -0.025em;
+  flex: 1;
 }
 
 .header-right {
@@ -586,16 +576,8 @@ onMounted(async () => {
   border-color: var(--color-primary-dark);
 }
 
-/* Tab Navigation */
+/* Tab Navigation in Header */
 .tab-nav {
-  background: white;
-  border-bottom: 1px solid var(--border-light);
-  padding: 0 var(--spacing-xl);
-}
-
-.tab-nav-content {
-  max-width: 1400px;
-  margin: 0 auto;
   display: flex;
   gap: var(--spacing-lg);
 }
@@ -603,36 +585,39 @@ onMounted(async () => {
 .tab-button {
   background: none;
   border: none;
-  padding: var(--spacing-lg) 0;
-  font-size: var(--font-size-base);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-gray-600);
   cursor: pointer;
   transition: var(--transition-fast);
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  border-bottom: 2px solid transparent;
+  gap: var(--spacing-xs);
+  border-radius: var(--border-radius);
+  white-space: nowrap;
 }
 
 .tab-button:hover {
   color: var(--color-gray-800);
+  background: var(--color-gray-50);
 }
 
 .tab-button.active {
   color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .tab-count {
   background: var(--color-gray-200);
   color: var(--color-gray-700);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 2px var(--spacing-xs);
   border-radius: var(--radius-xl);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  min-width: 20px;
+  min-width: 18px;
   text-align: center;
+  line-height: 1;
 }
 
 .tab-button.active .tab-count {
@@ -643,7 +628,27 @@ onMounted(async () => {
 /* Main Content */
 .main-content {
   flex: 1;
+  overflow-y: auto;
   padding: var(--spacing-xl);
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling for main content */
+.main-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.main-content::-webkit-scrollbar-track {
+  background: var(--color-gray-50);
+}
+
+.main-content::-webkit-scrollbar-thumb {
+  background: var(--color-gray-300);
+  border-radius: 4px;
+}
+
+.main-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-400);
 }
 
 .container {
@@ -716,7 +721,8 @@ onMounted(async () => {
   
   .header-left {
     order: 2;
-    justify-content: center;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
   
   .header-right {
@@ -729,9 +735,23 @@ onMounted(async () => {
     flex: 1;
   }
   
-  .tab-nav-content {
+  .tab-nav {
     overflow-x: auto;
     gap: var(--spacing-md);
+    padding-bottom: var(--spacing-xs);
+  }
+  
+  .tab-nav::-webkit-scrollbar {
+    height: 2px;
+  }
+  
+  .tab-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .tab-nav::-webkit-scrollbar-thumb {
+    background: var(--color-gray-300);
+    border-radius: 1px;
   }
   
   .batch-bar {
@@ -761,8 +781,13 @@ onMounted(async () => {
     min-width: 200px;
   }
   
-  .app-title {
-    font-size: var(--font-size-lg);
+  .tab-nav {
+    gap: var(--spacing-sm);
+  }
+  
+  .tab-button {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
   }
 }
 </style>

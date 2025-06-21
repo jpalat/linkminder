@@ -107,8 +107,6 @@ const handleBookmarkClick = (bookmark: Bookmark) => {
 .bookmark-grid {
   display: grid;
   gap: 2px;
-  max-height: 600px;
-  overflow-y: auto;
 }
 
 /* Transition animations */
@@ -134,29 +132,11 @@ const handleBookmarkClick = (bookmark: Bookmark) => {
   left: 0;
 }
 
-/* Scrollbar styling */
-.bookmark-grid::-webkit-scrollbar {
-  width: 6px;
-}
-
-.bookmark-grid::-webkit-scrollbar-track {
-  background: var(--color-gray-100);
-  border-radius: var(--radius-sm);
-}
-
-.bookmark-grid::-webkit-scrollbar-thumb {
-  background: var(--color-gray-400);
-  border-radius: var(--radius-sm);
-}
-
-.bookmark-grid::-webkit-scrollbar-thumb:hover {
-  background: var(--color-gray-500);
-}
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .bookmark-grid {
-    max-height: 500px;
+    gap: 1px;
   }
 }
 </style>
