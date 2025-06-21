@@ -194,12 +194,47 @@
           <AppButton size="sm" @click="moveSelectedTo('archived')">
             Archive
           </AppButton>
+          <AppButton size="sm" variant="danger" @click="handleBatchDelete">
+            Delete
+          </AppButton>
           <AppButton size="sm" variant="secondary" @click="clearSelection">
             Cancel
           </AppButton>
         </div>
       </div>
     </Transition>
+
+    <!-- Modals -->
+    <AddBookmarkModal
+      v-model:show="showAddModal"
+      :existing-topics="existingTopics"
+      @submit="handleAddBookmark"
+    />
+
+    <PreviewModal
+      v-model:show="showPreviewModal"
+      :bookmark="selectedBookmark"
+      @edit="handleEdit"
+      @move-to-share="(id) => moveBookmarks([id], 'share')"
+      @move-to-working="(id) => moveBookmarks([id], 'working')"
+      @archive="(id) => moveBookmarks([id], 'archived')"
+    />
+
+    <EditBookmarkModal
+      v-model:show="showEditModal"
+      :bookmark="selectedBookmark"
+      :existing-topics="existingTopics"
+      @submit="handleUpdateBookmark"
+      @delete="handleDeleteBookmark"
+    />
+
+    <ConfirmModal
+      v-model:show="showConfirmModal"
+      :config="confirmConfig"
+      :is-processing="isProcessingConfirm"
+      @confirm="handleConfirmAction"
+      @cancel="handleCancelConfirm"
+    />
   </div>
 </template>
 
@@ -216,6 +251,11 @@ import FilterPanel from '@/components/filters/FilterPanel.vue'
 import SortPanel from '@/components/ui/SortPanel.vue'
 import ProjectList from '@/components/project/ProjectList.vue'
 import ShareGroups from '@/components/share/ShareGroups.vue'
+import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
+import PreviewModal from '@/components/modals/PreviewModal.vue'
+import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
+import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
+import type { Bookmark } from '@/types'
 
 const bookmarkStore = useBookmarkStore()
 const {
@@ -239,7 +279,9 @@ const {
   moveBookmarks,
   loadBookmarks,
   updateFilters,
-  setSortOrder
+  setSortOrder,
+  addBookmark,
+  updateBookmark
 } = bookmarkStore
 
 // Local state
@@ -247,6 +289,13 @@ const searchQuery = ref('')
 const showFilters = ref(false)
 const showSort = ref(false)
 const showAddModal = ref(false)
+const showPreviewModal = ref(false)
+const showEditModal = ref(false)
+const showConfirmModal = ref(false)
+const selectedBookmark = ref<Bookmark | null>(null)
+const confirmConfig = ref<ConfirmationConfig>({ type: 'custom' })
+const isProcessingConfirm = ref(false)
+const pendingConfirmAction = ref<(() => void) | null>(null)
 
 // Computed
 const tabs = computed(() => [
@@ -278,6 +327,17 @@ const tabs = computed(() => [
 
 const projectStats = computed(() => dashboardStats.value.projectStats)
 
+// Get unique topics for the topic selector
+const existingTopics = computed(() => {
+  const topics = new Set<string>()
+  bookmarks.value.forEach(bookmark => {
+    if (bookmark.topic) {
+      topics.add(bookmark.topic)
+    }
+  })
+  return Array.from(topics).sort()
+})
+
 const hasActiveFilters = computed(() => {
   return Object.values(filters.value).some(value => value && value.trim() !== '')
 })
@@ -303,13 +363,113 @@ const handleSearch = (query: string) => {
 }
 
 const handlePreview = (bookmarkId: string) => {
-  console.log('Preview bookmark:', bookmarkId)
-  // Implementation for preview modal
+  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    selectedBookmark.value = bookmark
+    showPreviewModal.value = true
+  }
 }
 
 const handleEdit = (bookmarkId: string) => {
-  console.log('Edit bookmark:', bookmarkId)
-  // Implementation for edit modal
+  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    selectedBookmark.value = bookmark
+    showEditModal.value = true
+  }
+}
+
+const handleAddBookmark = (bookmarkData: any) => {
+  // Add the bookmark to the store
+  addBookmark(bookmarkData)
+  console.log('Added bookmark:', bookmarkData)
+  // TODO: Show success notification
+}
+
+const handleUpdateBookmark = (bookmarkData: Bookmark) => {
+  // Update the bookmark in the store
+  updateBookmark(bookmarkData.id, bookmarkData)
+  console.log('Updated bookmark:', bookmarkData)
+  // TODO: Show success notification
+}
+
+const handleDeleteBookmark = (bookmarkId: string) => {
+  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
+  if (!bookmark) return
+
+  confirmConfig.value = {
+    type: 'delete',
+    title: 'Delete Bookmark',
+    message: 'Are you sure you want to delete this bookmark?',
+    details: 'This action cannot be undone.',
+    items: [bookmark],
+    isDestructive: true
+  }
+  
+  pendingConfirmAction.value = () => {
+    // Remove from bookmarks array (this would be an API call in real implementation)
+    const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
+    if (index !== -1) {
+      bookmarks.value.splice(index, 1)
+    }
+    showEditModal.value = false
+    console.log('Deleted bookmark:', bookmarkId)
+    // TODO: Show success notification
+  }
+  
+  showConfirmModal.value = true
+}
+
+const handleBatchDelete = () => {
+  const selectedIds = Array.from(selectedItems.value)
+  const selectedBookmarks = bookmarks.value.filter(b => selectedIds.includes(b.id))
+  
+  if (selectedBookmarks.length === 0) return
+
+  confirmConfig.value = {
+    type: 'delete',
+    title: `Delete ${selectedBookmarks.length} Bookmark${selectedBookmarks.length > 1 ? 's' : ''}`,
+    message: `Are you sure you want to delete ${selectedBookmarks.length} bookmark${selectedBookmarks.length > 1 ? 's' : ''}?`,
+    details: 'This action cannot be undone.',
+    items: selectedBookmarks,
+    isDestructive: true
+  }
+  
+  pendingConfirmAction.value = () => {
+    // Remove from bookmarks array (this would be an API call in real implementation)
+    selectedIds.forEach(id => {
+      const index = bookmarks.value.findIndex(b => b.id === id)
+      if (index !== -1) {
+        bookmarks.value.splice(index, 1)
+      }
+    })
+    clearSelection()
+    console.log('Deleted bookmarks:', selectedIds)
+    // TODO: Show success notification
+  }
+  
+  showConfirmModal.value = true
+}
+
+const handleConfirmAction = async () => {
+  if (!pendingConfirmAction.value) return
+  
+  isProcessingConfirm.value = true
+  
+  try {
+    await pendingConfirmAction.value()
+  } catch (error) {
+    console.error('Error executing confirm action:', error)
+    // TODO: Show error notification
+  } finally {
+    isProcessingConfirm.value = false
+    showConfirmModal.value = false
+    pendingConfirmAction.value = null
+  }
+}
+
+const handleCancelConfirm = () => {
+  pendingConfirmAction.value = null
+  showConfirmModal.value = false
 }
 
 const moveSelectedTo = (action: string) => {
