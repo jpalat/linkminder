@@ -25,10 +25,10 @@
         </div>
         
         <div class="project-actions">
-          <AppButton size="xs" variant="primary">
-            View Details
+          <AppButton size="xs" variant="primary" @click.stop="handleProjectClick(project)">
+            View Details →
           </AppButton>
-          <AppButton size="xs" variant="secondary">
+          <AppButton size="xs" variant="secondary" @click.stop>
             Export
           </AppButton>
         </div>
@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import type { ProjectStat } from '@/types'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
@@ -48,6 +49,8 @@ interface Props {
 
 defineProps<Props>()
 
+const router = useRouter()
+
 const emit = defineEmits<{
   'project-click': [project: ProjectStat]
 }>()
@@ -55,7 +58,7 @@ const emit = defineEmits<{
 const handleProjectClick = (project: ProjectStat) => {
   emit('project-click', project)
   // Navigate to project detail page
-  console.log('Navigate to project:', project.topic)
+  router.push(`/project/${encodeURIComponent(project.topic)}`)
 }
 
 const getStatusVariant = (status: string): 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info' => {

@@ -1,5 +1,10 @@
 <template>
   <div class="bookmark-list">
+    <!-- Results Info -->
+    <div v-if="showResultsCount && !loading" class="results-info">
+      {{ resultsText }}
+    </div>
+    
     <div v-if="loading" class="loading">
       Loading bookmarks...
     </div>
@@ -45,12 +50,15 @@ interface Props {
   batchMode?: boolean
   loading?: boolean
   emptyMessage?: string
+  totalCount?: number
+  showResultsCount?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   batchMode: false,
   loading: false,
-  emptyMessage: 'Try adding some bookmarks or adjusting your filters.'
+  emptyMessage: 'Try adding some bookmarks or adjusting your filters.',
+  showResultsCount: false
 })
 
 const emit = defineEmits<{
@@ -66,6 +74,16 @@ const emit = defineEmits<{
 const bookmarkStore = useBookmarkStore()
 const { selectedItems } = storeToRefs(bookmarkStore)
 
+const resultsText = computed(() => {
+  const count = props.bookmarks.length
+  const total = props.totalCount || count
+  
+  if (props.totalCount && count < total) {
+    return `Showing ${count} of ${total} items`
+  }
+  return `${count} item${count !== 1 ? 's' : ''}`
+})
+
 const handleBookmarkClick = (bookmark: Bookmark) => {
   emit('bookmark-click', bookmark)
 }
@@ -76,9 +94,19 @@ const handleBookmarkClick = (bookmark: Bookmark) => {
   width: 100%;
 }
 
+.results-info {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #fffbeb;
+  border-bottom: 1px solid #fed7aa;
+  font-size: var(--font-size-sm);
+  color: #92400e;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  margin-bottom: var(--spacing-xs);
+}
+
 .bookmark-grid {
   display: grid;
-  gap: var(--spacing-sm);
+  gap: 2px;
   max-height: 600px;
   overflow-y: auto;
 }

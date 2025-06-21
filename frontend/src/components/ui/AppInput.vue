@@ -55,20 +55,28 @@ defineEmits<{
 
 .input {
   width: 100%;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
+  padding: 8px var(--spacing-lg);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
   font-size: var(--font-size-base);
-  background: var(--bg-input);
+  background: rgba(255, 255, 255, 0.2);
   color: var(--color-gray-800);
   transition: var(--transition-fast);
 }
 
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .input:focus {
   outline: none;
-  border-color: var(--border-focus);
-  background: var(--bg-input-focus);
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-gray-800);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.input:focus::placeholder {
+  color: var(--color-gray-600);
 }
 
 .input-with-icon {
@@ -80,7 +88,7 @@ defineEmits<{
   left: var(--spacing-md);
   top: 50%;
   transform: translateY(-50%);
-  color: var(--color-gray-600);
+  color: rgba(255, 255, 255, 0.8);
   font-size: var(--font-size-base);
   pointer-events: none;
   z-index: 1;

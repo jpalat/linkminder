@@ -1,52 +1,75 @@
 <template>
   <div class="filter-panel">
-    <div class="filter-row">
-      <div class="filter-group">
-        <label class="filter-label">Topic</label>
-        <select v-model="localFilters.topic" class="filter-select">
-          <option value="">All Topics</option>
-          <option value="has-topic">Has Topic</option>
-          <option value="no-topic">No Topic</option>
-          <option value="ai-tools">AI Tools</option>
-          <option value="react-migration">React Migration</option>
-          <option value="css-learning">CSS Learning</option>
-          <option value="framework-research">Framework Research</option>
-        </select>
-      </div>
-      
-      <div class="filter-group">
-        <label class="filter-label">Domain</label>
-        <select v-model="localFilters.domain" class="filter-select">
-          <option value="">All Domains</option>
-          <option value="react.dev">react.dev</option>
-          <option value="openai.com">openai.com</option>
-          <option value="css-tricks.com">css-tricks.com</option>
-          <option value="logrocket.com">logrocket.com</option>
-          <option value="microsoft.com">microsoft.com</option>
-        </select>
-      </div>
-      
-      <div class="filter-group">
-        <label class="filter-label">Age</label>
-        <select v-model="localFilters.age" class="filter-select">
-          <option value="">Any Time</option>
-          <option value="today">Today</option>
-          <option value="yesterday">Yesterday</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="older">Older</option>
-        </select>
-      </div>
-      
-      <div class="filter-actions">
-        <AppButton size="sm" variant="success" @click="applyFilters">
-          Apply
-        </AppButton>
-        <AppButton size="sm" variant="secondary" @click="clearAllFilters">
-          Clear
-        </AppButton>
-      </div>
+    <!-- Primary Search Row -->
+    <div class="primary-search-row">
+      <AppInput
+        v-model="searchQuery"
+        icon="🔍"
+        placeholder="Search bookmarks by title, URL, or content..."
+        @input="handleSearchInput"
+      />
+      <AppButton 
+        size="sm" 
+        variant="secondary"
+        @click="showAdvanced = !showAdvanced"
+        :class="{ 'active': showAdvanced }"
+      >
+        🎯 {{ showAdvanced ? 'Hide' : 'More' }} Filters
+      </AppButton>
     </div>
+    
+    <!-- Advanced Filters (Progressive Disclosure) -->
+    <Transition name="slide">
+      <div v-if="showAdvanced" class="advanced-filters">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">Topic</label>
+            <select v-model="localFilters.topic" class="filter-select">
+              <option value="">All Topics</option>
+              <option value="has-topic">Has Topic</option>
+              <option value="no-topic">No Topic</option>
+              <option value="ai-tools">AI Tools</option>
+              <option value="react-migration">React Migration</option>
+              <option value="css-learning">CSS Learning</option>
+              <option value="framework-research">Framework Research</option>
+            </select>
+          </div>
+          
+          <div class="filter-group">
+            <label class="filter-label">Domain</label>
+            <select v-model="localFilters.domain" class="filter-select">
+              <option value="">All Domains</option>
+              <option value="react.dev">react.dev</option>
+              <option value="openai.com">openai.com</option>
+              <option value="css-tricks.com">css-tricks.com</option>
+              <option value="logrocket.com">logrocket.com</option>
+              <option value="microsoft.com">microsoft.com</option>
+            </select>
+          </div>
+          
+          <div class="filter-group">
+            <label class="filter-label">Age</label>
+            <select v-model="localFilters.age" class="filter-select">
+              <option value="">Any Time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="older">Older</option>
+            </select>
+          </div>
+          
+          <div class="filter-actions">
+            <AppButton size="sm" variant="success" @click="applyFilters">
+              Apply
+            </AppButton>
+            <AppButton size="sm" variant="secondary" @click="clearAllFilters">
+              Clear
+            </AppButton>
+          </div>
+        </div>
+      </div>
+    </Transition>
     
     <!-- Active Filters Display -->
     <div v-if="hasActiveFilters" class="active-filters">
@@ -73,6 +96,7 @@ import { storeToRefs } from 'pinia'
 import { useBookmarkStore } from '@/stores/bookmarks'
 import type { FilterState } from '@/types'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInput from '@/components/ui/AppInput.vue'
 
 const bookmarkStore = useBookmarkStore()
 const { filters } = storeToRefs(bookmarkStore)
@@ -80,6 +104,8 @@ const { updateFilters, clearFilters } = bookmarkStore
 
 // Local reactive copy of filters
 const localFilters = ref<FilterState>({ ...filters.value })
+const searchQuery = ref(filters.value.search || '')
+const showAdvanced = ref(false)
 
 // Watch for external filter changes
 watch(filters, (newFilters) => {
@@ -127,15 +153,39 @@ const clearAllFilters = () => {
 
 const removeFilter = (filterKey: string) => {
   localFilters.value = { ...localFilters.value, [filterKey]: '' }
+  if (filterKey === 'search') {
+    searchQuery.value = ''
+  }
+  applyFilters()
+}
+
+const handleSearchInput = (value: string) => {
+  localFilters.value.search = value
   applyFilters()
 }
 </script>
 
 <style scoped>
 .filter-panel {
-  background: var(--color-gray-50);
+  background: #f7fafc;
   border-bottom: 1px solid var(--border-light);
   padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+.primary-search-row {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.primary-search-row > :first-child {
+  flex: 1;
+}
+
+.advanced-filters {
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-light);
 }
 
 .filter-row {
@@ -229,8 +279,40 @@ const removeFilter = (filterKey: string) => {
   opacity: 1;
 }
 
+/* Button active state */
+.btn.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* Slide transition */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  margin-bottom: 0;
+}
+
+.slide-enter-to,
+.slide-leave-from {
+  opacity: 1;
+  max-height: 200px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .primary-search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
   .filter-row {
     flex-direction: column;
     align-items: stretch;

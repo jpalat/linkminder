@@ -106,9 +106,11 @@ defineEmits<{
 
 /* Sizes */
 .xs {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-xs);
+  padding: 4px 8px;
+  font-size: 0.7rem;
   border-radius: var(--radius-sm);
+  min-width: 32px;
+  text-align: center;
 }
 
 .sm {

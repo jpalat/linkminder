@@ -11,74 +11,96 @@
         :key="group.destination"
         class="share-group"
       >
-        <div class="group-header">
-          <div class="group-title">
-            {{ group.icon }} {{ group.destination }} ({{ group.items.length }} items)
+        <!-- Group Header -->
+        <div class="share-group-header">
+          <div class="share-group-info">
+            <div class="share-group-title">{{ group.icon }} {{ group.destination }}</div>
+            <div class="share-group-count">{{ group.items.length }}</div>
           </div>
-          <div class="group-actions">
-            <AppButton size="sm" variant="success" @click="shareGroup(group)">
-              Share All
+          <div class="share-group-actions">
+            <AppButton 
+              size="sm" 
+              variant="success" 
+              @click="shareGroup(group)"
+            >
+              {{ getShareButtonText(group.destination) }}
             </AppButton>
-            <AppButton size="sm" variant="secondary" @click="showCopyOptions(group)">
-              Copy
+            <AppButton 
+              size="sm" 
+              variant="primary" 
+              @click="completeGroup(group)"
+            >
+              ✅ Complete
             </AppButton>
           </div>
         </div>
         
-        <div class="group-items">
+        <!-- Destination Info -->
+        <div class="destination-info">
+          <strong>Destination:</strong> {{ getDestinationDetails(group.destination) }}
+        </div>
+        
+        <!-- Group Copy Section -->
+        <div class="group-copy-section">
+          <div class="group-copy-title">📋 Copy All {{ group.destination }} Items</div>
+          <div class="group-copy-formats">
+            <button 
+              v-for="format in getGroupFormats(group.destination)" 
+              :key="format.key"
+              class="group-copy-btn" 
+              @click="copyGroupItems(group, format.key)"
+            >
+              {{ format.icon }} {{ format.label }}
+            </button>
+          </div>
+        </div>
+        
+        <!-- Group Items -->
+        <div class="share-group-items">
           <div
             v-for="item in group.items"
             :key="item.id"
             class="share-item"
           >
-            <div class="item-content">
-              <h4 class="item-title">{{ item.title }}</h4>
-              <a :href="item.url" class="item-url" target="_blank" rel="noopener noreferrer">
-                {{ item.url }}
-              </a>
-              <div class="item-meta">
-                <span class="item-domain">{{ item.domain }}</span>
-                <span class="item-time">{{ item.age }}</span>
+            <div class="share-item-header">
+              <div class="item-info">
+                <div class="item-title">{{ item.title }}</div>
+                <div class="item-url">{{ item.url }}</div>
+                <div class="item-meta">
+                  <span>{{ item.domain }}</span>
+                  <span>{{ item.age }}</span>
+                </div>
+              </div>
+              <div class="item-actions">
+                <button class="action-btn preview" @click="previewItem(item)">👁️</button>
+                <button class="action-btn edit" @click="editItem(item)">✏️</button>
+                <button class="action-btn share" @click="shareItem(item)">📤</button>
               </div>
             </div>
             
-            <div class="item-actions">
-              <AppButton size="xs" variant="info" @click="previewItem(item)">
-                👁️
-              </AppButton>
-              <AppButton size="xs" variant="secondary" @click="editItem(item)">
-                ✏️
-              </AppButton>
-              <AppButton size="xs" variant="success" @click="completeItem(item)">
-                Complete
-              </AppButton>
+            <!-- Individual Item Format Buttons -->
+            <div class="share-formats">
+              <button 
+                v-for="format in itemFormats"
+                :key="format.key"
+                class="format-btn" 
+                @click="copyItemFormat(item, format.key)"
+              >
+                {{ format.icon }} {{ format.label }}
+              </button>
+              <button class="format-btn" @click="showItemPreview(item)">
+                👁️ Preview
+              </button>
+            </div>
+            
+            <!-- Format Preview (expandable) -->
+            <div v-if="item.id === previewItemId" class="format-preview">
+              <div class="preview-content">
+                {{ getItemPreview(item, previewFormat) }}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-    
-    <!-- Copy Options Modal (simplified) -->
-    <div v-if="showCopyModal" class="copy-modal" @click="showCopyModal = false">
-      <div class="copy-content" @click.stop>
-        <h3>Copy {{ selectedGroup?.destination }} Items</h3>
-        <div class="copy-formats">
-          <AppButton @click="copyAs('markdown')">
-            📝 Markdown
-          </AppButton>
-          <AppButton @click="copyAs('email')">
-            📧 Email
-          </AppButton>
-          <AppButton @click="copyAs('slack')">
-            💬 Slack
-          </AppButton>
-          <AppButton @click="copyAs('plain')">
-            📄 Plain Text
-          </AppButton>
-        </div>
-        <AppButton variant="secondary" @click="showCopyModal = false">
-          Cancel
-        </AppButton>
       </div>
     </div>
   </div>
@@ -98,32 +120,75 @@ defineProps<Props>()
 
 const emit = defineEmits<{
   'share-group': [group: ShareGroup]
+  'complete-group': [group: ShareGroup]
   'preview-item': [item: Bookmark]
   'edit-item': [item: Bookmark]
-  'complete-item': [item: Bookmark]
+  'share-item': [item: Bookmark]
 }>()
 
 // Copy functionality
 const { copy } = useClipboard()
-const showCopyModal = ref(false)
-const selectedGroup = ref<ShareGroup | null>(null)
+const previewItemId = ref<string | null>(null)
+const previewFormat = ref('markdown')
 
-const showCopyOptions = (group: ShareGroup) => {
-  selectedGroup.value = group
-  showCopyModal.value = true
+// Format definitions
+const itemFormats = [
+  { key: 'markdown', label: 'Markdown', icon: '📝' },
+  { key: 'email', label: 'Email', icon: '📧' },
+  { key: 'slack', label: 'Slack', icon: '💬' }
+]
+
+// Group-specific format options
+const getGroupFormats = (destination: string) => {
+  const baseFormats = [
+    { key: 'markdown', label: 'Markdown', icon: '📝' },
+    { key: 'email', label: 'Email Format', icon: '📧' },
+    { key: 'plain', label: 'Plain Text', icon: '📄' },
+    { key: 'slack', label: 'Slack', icon: '💬' }
+  ]
+  
+  if (destination === 'Team Slack') {
+    return [
+      { key: 'slack', label: 'Slack Format', icon: '💬' },
+      { key: 'markdown', label: 'Markdown', icon: '📝' },
+      { key: 'email', label: 'Email', icon: '📧' },
+      { key: 'plain', label: 'Plain Text', icon: '📄' }
+    ]
+  }
+  
+  if (destination === 'Newsletter') {
+    return [
+      { key: 'email', label: 'Email Format', icon: '📧' },
+      { key: 'markdown', label: 'Markdown', icon: '📝' },
+      { key: 'plain', label: 'Plain Text', icon: '📄' },
+      { key: 'slack', label: 'Slack', icon: '💬' }
+    ]
+  }
+  
+  return baseFormats
 }
 
-const copyAs = async (format: string) => {
-  if (!selectedGroup.value) return
-  
-  const content = formatGroupContent(selectedGroup.value, format)
-  await copy(content)
-  showCopyModal.value = false
-  
-  // Show success feedback (you could use a toast notification here)
-  console.log(`Copied ${selectedGroup.value.destination} items as ${format}`)
+const getShareButtonText = (destination: string): string => {
+  const buttonTexts: Record<string, string> = {
+    'Team Slack': '📤 Share to Slack',
+    'Newsletter': '📧 Add to Newsletter',
+    'Dev Blog': '📝 Add to Blog',
+    'Unassigned': '📤 Share'
+  }
+  return buttonTexts[destination] || '📤 Share'
 }
 
+const getDestinationDetails = (destination: string): string => {
+  const details: Record<string, string> = {
+    'Team Slack': '#dev-resources channel • Webhook configured',
+    'Newsletter': 'Weekly Dev Newsletter • Next send: Friday 9 AM',
+    'Dev Blog': 'Company Tech Blog • Draft saved',
+    'Unassigned': 'No destination configured'
+  }
+  return details[destination] || 'Custom destination'
+}
+
+// Formatting functions
 const formatGroupContent = (group: ShareGroup, format: string): string => {
   const { destination, items } = group
   
@@ -151,9 +216,27 @@ const formatGroupContent = (group: ShareGroup, format: string): string => {
   }
 }
 
+const formatItemContent = (item: Bookmark, format: string): string => {
+  switch (format) {
+    case 'markdown':
+      return `[${item.title}](${item.url})${item.description ? ` - ${item.description}` : ''}`
+    case 'email':
+      return `${item.title}\n${item.url}${item.description ? `\n${item.description}` : ''}`
+    case 'slack':
+      return `<${item.url}|${item.title}>${item.description ? ` - ${item.description}` : ''}`
+    case 'plain':
+    default:
+      return `${item.title}\n${item.url}${item.description ? `\n${item.description}` : ''}`
+  }
+}
+
 // Event handlers
 const shareGroup = (group: ShareGroup) => {
   emit('share-group', group)
+}
+
+const completeGroup = (group: ShareGroup) => {
+  emit('complete-group', group)
 }
 
 const previewItem = (item: Bookmark) => {
@@ -164,8 +247,33 @@ const editItem = (item: Bookmark) => {
   emit('edit-item', item)
 }
 
-const completeItem = (item: Bookmark) => {
-  emit('complete-item', item)
+const shareItem = (item: Bookmark) => {
+  emit('share-item', item)
+}
+
+const copyGroupItems = async (group: ShareGroup, format: string) => {
+  const content = formatGroupContent(group, format)
+  await copy(content)
+  console.log(`Copied ${group.destination} items as ${format}`)
+}
+
+const copyItemFormat = async (item: Bookmark, format: string) => {
+  const content = formatItemContent(item, format)
+  await copy(content)
+  console.log(`Copied "${item.title}" as ${format}`)
+}
+
+const showItemPreview = (item: Bookmark) => {
+  if (previewItemId.value === item.id) {
+    previewItemId.value = null
+  } else {
+    previewItemId.value = item.id
+    previewFormat.value = 'markdown'
+  }
+}
+
+const getItemPreview = (item: Bookmark, format: string): string => {
+  return formatItemContent(item, format)
 }
 </script>
 
@@ -177,49 +285,110 @@ const completeItem = (item: Bookmark) => {
 .groups-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-2xl);
 }
 
 .share-group {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-md);
+  background: white;
 }
 
-.group-header {
-  background: var(--color-gray-50);
+/* Group Header */
+.share-group-header {
+  background: #f8fafc;
   padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--border-light);
 }
 
-.group-title {
+.share-group-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.share-group-title {
   font-weight: var(--font-weight-semibold);
   color: var(--color-gray-800);
   font-size: var(--font-size-lg);
 }
 
-.group-actions {
+.share-group-count {
+  background: var(--color-primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  min-width: 20px;
+  text-align: center;
+}
+
+.share-group-actions {
   display: flex;
   gap: var(--spacing-sm);
 }
 
-.group-items {
+/* Destination Info */
+.destination-info {
+  background: #fffbeb;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-bottom: 1px solid #fed7aa;
+  font-size: var(--font-size-sm);
+  color: #92400e;
+}
+
+/* Group Copy Section */
+.group-copy-section {
+  background: #f0f9ff;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid #bee3f8;
+}
+
+.group-copy-title {
+  font-weight: var(--font-weight-semibold);
+  color: #1e40af;
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.group-copy-formats {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.group-copy-btn {
   background: white;
+  color: #1e40af;
+  border: 1px solid #bee3f8;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.group-copy-btn:hover {
+  background: #1e40af;
+  color: white;
+}
+
+/* Share Group Items */
+.share-group-items {
   padding: var(--spacing-lg);
 }
 
 .share-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: var(--spacing-md);
-  background: var(--bg-card-hover);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-md);
-  gap: var(--spacing-md);
+  overflow: hidden;
   transition: var(--transition-fast);
 }
 
@@ -228,11 +397,20 @@ const completeItem = (item: Bookmark) => {
 }
 
 .share-item:hover {
-  background: var(--color-gray-200);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
-.item-content {
+/* Share Item Header */
+.share-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--spacing-md);
+  background: var(--bg-card-hover);
+  gap: var(--spacing-md);
+}
+
+.item-info {
   flex: 1;
   min-width: 0;
 }
@@ -242,15 +420,16 @@ const completeItem = (item: Bookmark) => {
   margin-bottom: var(--spacing-xs);
   color: var(--color-gray-800);
   font-size: var(--font-size-base);
+  line-height: var(--line-height-tight);
 }
 
 .item-url {
   color: var(--color-primary);
   font-size: var(--font-size-sm);
-  margin-bottom: var(--spacing-sm);
-  text-decoration: none;
+  margin-bottom: var(--spacing-xs);
   display: block;
   word-break: break-all;
+  text-decoration: none;
 }
 
 .item-url:hover {
@@ -262,13 +441,6 @@ const completeItem = (item: Bookmark) => {
   color: var(--color-gray-600);
   display: flex;
   gap: var(--spacing-md);
-}
-
-.item-domain {
-  background: var(--color-gray-200);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-xl);
-  font-size: var(--font-size-xs);
 }
 
 .item-actions {
@@ -283,51 +455,100 @@ const completeItem = (item: Bookmark) => {
   opacity: 1;
 }
 
-/* Copy Modal */
-.copy-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+.action-btn {
+  background: var(--color-gray-200);
+  color: var(--color-gray-700);
+  border: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.action-btn:hover {
+  background: var(--color-gray-300);
+}
+
+.action-btn.preview {
+  background: #e9d8fd;
+  color: #553c9a;
+}
+
+.action-btn.edit {
+  background: #fed7d7;
+  color: #742a2a;
+}
+
+.action-btn.share {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+/* Share Formats */
+.share-formats {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
-.copy-content {
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
   background: white;
-  padding: var(--spacing-2xl);
-  border-radius: var(--radius-xl);
-  max-width: 400px;
-  width: 90%;
-  box-shadow: var(--shadow-xl);
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
 }
 
-.copy-content h3 {
-  margin-bottom: var(--spacing-xl);
-  text-align: center;
-  color: var(--color-gray-800);
+.format-btn {
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: 1px solid var(--border-light);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: var(--transition-fast);
 }
 
-.copy-formats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
+.format-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Format Preview */
+.format-preview {
+  background: #f8fafc;
+  border-top: 1px solid var(--border-light);
+  padding: var(--spacing-md);
+}
+
+.preview-content {
+  background: white;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .group-header {
+  .share-group-header {
     flex-direction: column;
     gap: var(--spacing-md);
     align-items: stretch;
   }
   
-  .share-item {
+  .share-group-info {
+    justify-content: center;
+  }
+  
+  .group-copy-formats {
+    flex-direction: column;
+  }
+  
+  .share-item-header {
     flex-direction: column;
     align-items: stretch;
   }
@@ -338,8 +559,8 @@ const completeItem = (item: Bookmark) => {
     margin-top: var(--spacing-sm);
   }
   
-  .copy-formats {
-    grid-template-columns: 1fr;
+  .share-formats {
+    flex-direction: column;
   }
 }
 </style>

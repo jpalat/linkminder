@@ -163,14 +163,15 @@ const truncateText = (text: string, maxLength: number) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-card-hover);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border-left: 3px solid var(--border-light);
   transition: var(--transition-fast);
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   cursor: pointer;
   position: relative;
+  margin-bottom: var(--spacing-xs);
 }
 
 .bookmark-card:hover {
@@ -182,6 +183,7 @@ const truncateText = (text: string, maxLength: number) => {
 .bookmark-card-selected {
   border-color: var(--color-primary);
   background: #ebf8ff;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
 }
 
 .bookmark-card-batch-mode .bookmark-content {
@@ -194,6 +196,9 @@ const truncateText = (text: string, maxLength: number) => {
   left: var(--spacing-sm);
   opacity: 0;
   transition: opacity var(--transition-fast);
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
 }
 
 .bookmark-card:hover .bookmark-checkbox,
@@ -216,17 +221,17 @@ const truncateText = (text: string, maxLength: number) => {
 
 .bookmark-title {
   font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 2px;
   color: var(--color-gray-800);
   line-height: var(--line-height-tight);
-  font-size: var(--font-size-base);
+  font-size: 0.9rem;
   flex: 1;
 }
 
 .bookmark-url {
   color: var(--color-primary);
-  font-size: var(--font-size-sm);
-  margin-bottom: var(--spacing-sm);
+  font-size: 0.8rem;
+  margin-bottom: 4px;
   text-decoration: none;
   display: block;
   word-break: break-all;
@@ -237,12 +242,12 @@ const truncateText = (text: string, maxLength: number) => {
 }
 
 .bookmark-meta {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-gray-600);
   display: flex;
   gap: var(--spacing-md);
   flex-wrap: wrap;
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: 0;
 }
 
 .bookmark-domain {
@@ -262,11 +267,11 @@ const truncateText = (text: string, maxLength: number) => {
 .bookmark-actions {
   display: flex;
   flex-direction: row;
-  gap: var(--spacing-xs);
+  gap: 2px;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-fast);
-  flex-wrap: wrap;
+  align-items: center;
 }
 
 .bookmark-card:hover .bookmark-actions {
