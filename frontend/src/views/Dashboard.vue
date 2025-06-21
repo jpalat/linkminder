@@ -281,7 +281,8 @@ const {
   updateFilters,
   setSortOrder,
   addBookmark,
-  updateBookmark
+  updateBookmark,
+  loadDashboardStats
 } = bookmarkStore
 
 // Local state
@@ -378,18 +379,28 @@ const handleEdit = (bookmarkId: string) => {
   }
 }
 
-const handleAddBookmark = (bookmarkData: any) => {
-  // Add the bookmark to the store
-  addBookmark(bookmarkData)
-  console.log('Added bookmark:', bookmarkData)
-  // TODO: Show success notification
+const handleAddBookmark = async (bookmarkData: any) => {
+  try {
+    // Add the bookmark to the store
+    await addBookmark(bookmarkData)
+    console.log('Added bookmark:', bookmarkData)
+    // TODO: Show success notification
+  } catch (error) {
+    console.error('Failed to add bookmark:', error)
+    // TODO: Show error notification
+  }
 }
 
-const handleUpdateBookmark = (bookmarkData: Bookmark) => {
-  // Update the bookmark in the store
-  updateBookmark(bookmarkData.id, bookmarkData)
-  console.log('Updated bookmark:', bookmarkData)
-  // TODO: Show success notification
+const handleUpdateBookmark = async (bookmarkData: Bookmark) => {
+  try {
+    // Update the bookmark in the store
+    await updateBookmark(bookmarkData.id, bookmarkData)
+    console.log('Updated bookmark:', bookmarkData)
+    // TODO: Show success notification
+  } catch (error) {
+    console.error('Failed to update bookmark:', error)
+    // TODO: Show error notification
+  }
 }
 
 const handleDeleteBookmark = (bookmarkId: string) => {
@@ -478,8 +489,9 @@ const moveSelectedTo = (action: string) => {
 }
 
 // Lifecycle
-onMounted(() => {
-  loadBookmarks()
+onMounted(async () => {
+  await loadBookmarks()
+  await loadDashboardStats()
 })
 </script>
 
