@@ -26,6 +26,15 @@ export interface Project {
   progress?: number
 }
 
+export interface ProjectDetail {
+  topic: string
+  linkCount: number
+  lastUpdated: string
+  status: 'active' | 'stale' | 'inactive'
+  progress?: number
+  bookmarks: Bookmark[]
+}
+
 export interface FilterState {
   search?: string
   topic?: string
