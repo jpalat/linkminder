@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Detail - BookMinder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .navigation {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .nav-btn {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            color: #4a5568;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .nav-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            color: #2d3748;
+            transform: translateY(-1px);
+        }
+        
+        .nav-btn:active {
+            transform: translateY(0);
+        }
+        
+        .project-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+        
+        .project-meta {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #718096;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .status-active { background: #c6f6d5; color: #22543d; }
+        .status-stale { background: #fed7aa; color: #9c4221; }
+        .status-inactive { background: #fed7e2; color: #97266d; }
+        
+        .controls {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .controls h3 {
+            margin-bottom: 16px;
+            color: #2d3748;
+        }
+        
+        .filter-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .filter-group label {
+            font-weight: 500;
+            color: #4a5568;
+            font-size: 0.875rem;
+        }
+        
+        .filter-group input,
+        .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            background: white;
+        }
+        
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+        
+        .sort-section {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+        
+        .clear-filters {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        
+        .clear-filters:hover {
+            background: #c53030;
+        }
+        
+        .results-info {
+            background: white;
+            border-radius: 12px;
+            padding: 16px 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .bookmarks-grid {
+            display: grid;
+            gap: 16px;
+        }
+        
+        .bookmark-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .bookmark-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        
+        .bookmark-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+            gap: 16px;
+        }
+        
+        .bookmark-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #2d3748;
+            text-decoration: none;
+            flex: 1;
+        }
+        
+        .bookmark-title:hover {
+            color: #4299e1;
+        }
+        
+        .bookmark-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-preview {
+            background: #805ad5;
+            color: white;
+        }
+
+        .btn-preview:hover {
+            background: #6b46c1;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+        
+        .action-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .action-working { background: #bee3f8; color: #2b6cb0; }
+        .action-share { background: #c6f6d5; color: #22543d; }
+        .action-read-later { background: #fbb6ce; color: #97266d; }
+        .action-archived { background: #e2e8f0; color: #4a5568; }
+        
+        .bookmark-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            font-size: 0.875rem;
+            color: #718096;
+        }
+        
+        .bookmark-description {
+            color: #4a5568;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .bookmark-url {
+            font-size: 0.875rem;
+            color: #4299e1;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        
+        .bookmark-url:hover {
+            text-decoration: underline;
+        }
+        
+        .no-results {
+            background: white;
+            border-radius: 12px;
+            padding: 48px 24px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .no-results h3 {
+            color: #4a5568;
+            margin-bottom: 8px;
+        }
+        
+        .no-results p {
+            color: #718096;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 48px;
+            color: #718096;
+        }
+        
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+            
+            .header-top {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+            
+            .navigation {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .nav-btn {
+                flex: 1;
+                min-width: 100px;
+                justify-content: center;
+            }
+            
+            .project-meta {
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .filter-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .sort-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .results-info {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-top">
+                <div class="navigation">
+                    <button class="nav-btn" onclick="goBack()">← Back</button>
+                    <button class="nav-btn" onclick="goToDashboard()">🏠 Dashboard</button>
+                    <button class="nav-btn" onclick="goToProjects()">📂 All Projects</button>
+                </div>
+            </div>
+            <h1 class="project-title" id="projectTitle">Loading...</h1>
+            <div class="project-meta">
+                <div class="meta-item">
+                    <span>📚</span>
+                    <span id="linkCount">0 links</span>
+                </div>
+                <div class="meta-item">
+                    <span>🕒</span>
+                    <span id="lastUpdated">Never</span>
+                </div>
+                <div class="meta-item">
+                    <span class="status-badge" id="statusBadge">Unknown</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <h3>Filter & Sort Bookmarks</h3>
+            
+            <div class="filter-section">
+                <div class="filter-group">
+                    <label for="searchFilter">Search</label>
+                    <input type="text" id="searchFilter" placeholder="Search titles, descriptions, URLs...">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="actionFilter">Action</label>
+                    <select id="actionFilter">
+                        <option value="">All Actions</option>
+                        <option value="working">Working</option>
+                        <option value="share">Share</option>
+                        <option value="read-later">Read Later</option>
+                        <option value="archived">Archived</option>
+                        <option value="irrelevant">Irrelevant</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="domainFilter">Domain</label>
+                    <select id="domainFilter">
+                        <option value="">All Domains</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="dateFromFilter">From Date</label>
+                    <input type="date" id="dateFromFilter">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="dateToFilter">To Date</label>
+                    <input type="date" id="dateToFilter">
+                </div>
+            </div>
+            
+            <div class="sort-section">
+                <div class="filter-group">
+                    <label for="sortField">Sort By</label>
+                    <select id="sortField">
+                        <option value="timestamp">Date Added</option>
+                        <option value="title">Title</option>
+                        <option value="domain">Domain</option>
+                        <option value="action">Action</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="sortDirection">Direction</label>
+                    <select id="sortDirection">
+                        <option value="desc">Newest First</option>
+                        <option value="asc">Oldest First</option>
+                    </select>
+                </div>
+                
+                <button class="clear-filters" onclick="clearAllFilters()">Clear Filters</button>
+            </div>
+        </div>
+
+        <div class="results-info">
+            <div>
+                <span id="resultsCount">0</span> of <span id="totalCount">0</span> bookmarks
+            </div>
+            <div id="activeFilters"></div>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading project details...</div>
+        </div>
+    </div>
+
+    <script>
+        let allBookmarks = [];
+        let filteredBookmarks = [];
+        let projectData = {};
+
+        // Get project identifier from URL parameters (supports both ID and topic)
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectId = urlParams.get('id');
+        const projectTopic = urlParams.get('topic');
+        
+        if (!projectId && !projectTopic) {
+            document.getElementById('content').innerHTML = 
+                '<div class="error">Error: No project specified. Please provide either an ID or topic parameter.</div>';
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProjectData();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Filter and sort controls
+            document.getElementById('searchFilter').addEventListener('input', debounce(applyFilters, 300));
+            document.getElementById('actionFilter').addEventListener('change', applyFilters);
+            document.getElementById('domainFilter').addEventListener('change', applyFilters);
+            document.getElementById('dateFromFilter').addEventListener('change', applyFilters);
+            document.getElementById('dateToFilter').addEventListener('change', applyFilters);
+            document.getElementById('sortField').addEventListener('change', applyFilters);
+            document.getElementById('sortDirection').addEventListener('change', applyFilters);
+        }
+
+        async function loadProjectData() {
+            try {
+                let response;
+                
+                // Use project ID if available, otherwise fall back to topic
+                if (projectId) {
+                    response = await fetch(`/api/projects/id/${encodeURIComponent(projectId)}`);
+                } else if (projectTopic) {
+                    response = await fetch(`/api/projects/${encodeURIComponent(projectTopic)}`);
+                } else {
+                    throw new Error('No project identifier provided');
+                }
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('Project not found');
+                    }
+                    throw new Error(`Failed to load project: ${response.statusText}`);
+                }
+
+                projectData = await response.json();
+                allBookmarks = projectData.bookmarks || [];
+                
+                updateProjectHeader();
+                populateDomainFilter();
+                applyFilters();
+                
+            } catch (error) {
+                console.error('Error loading project data:', error);
+                document.getElementById('content').innerHTML = 
+                    `<div class="error">Error loading project: ${error.message}</div>`;
+            }
+        }
+
+        function updateProjectHeader() {
+            document.getElementById('projectTitle').textContent = projectData.topic;
+            document.getElementById('linkCount').textContent = `${projectData.linkCount} links`;
+            document.getElementById('lastUpdated').textContent = formatDate(projectData.lastUpdated);
+            
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.textContent = projectData.status.charAt(0).toUpperCase() + projectData.status.slice(1);
+            statusBadge.className = `status-badge status-${projectData.status}`;
+            
+            document.title = `${projectData.topic} - BookMinder`;
+        }
+
+        function populateDomainFilter() {
+            const domains = [...new Set(allBookmarks.map(b => b.domain).filter(d => d))].sort();
+            const domainFilter = document.getElementById('domainFilter');
+            
+            // Clear existing options except "All Domains"
+            domainFilter.innerHTML = '<option value="">All Domains</option>';
+            
+            domains.forEach(domain => {
+                const option = document.createElement('option');
+                option.value = domain;
+                option.textContent = domain;
+                domainFilter.appendChild(option);
+            });
+        }
+
+        function applyFilters() {
+            const filters = {
+                search: document.getElementById('searchFilter').value.toLowerCase(),
+                action: document.getElementById('actionFilter').value,
+                domain: document.getElementById('domainFilter').value,
+                dateFrom: document.getElementById('dateFromFilter').value,
+                dateTo: document.getElementById('dateToFilter').value,
+            };
+
+            const sort = {
+                field: document.getElementById('sortField').value,
+                direction: document.getElementById('sortDirection').value
+            };
+
+            // Update sort direction label
+            const sortDirection = document.getElementById('sortDirection');
+            if (sort.field === 'timestamp') {
+                sortDirection.innerHTML = `
+                    <option value="desc">Newest First</option>
+                    <option value="asc">Oldest First</option>
+                `;
+            } else {
+                sortDirection.innerHTML = `
+                    <option value="asc">A to Z</option>
+                    <option value="desc">Z to A</option>
+                `;
+            }
+            sortDirection.value = sort.direction;
+
+            // Apply filters
+            filteredBookmarks = allBookmarks.filter(bookmark => {
+                // Search filter
+                if (filters.search) {
+                    const searchText = `${bookmark.title} ${bookmark.description} ${bookmark.url}`.toLowerCase();
+                    if (!searchText.includes(filters.search)) {
+                        return false;
+                    }
+                }
+
+                // Action filter
+                if (filters.action && bookmark.action !== filters.action) {
+                    return false;
+                }
+
+                // Domain filter
+                if (filters.domain && bookmark.domain !== filters.domain) {
+                    return false;
+                }
+
+                // Date filters
+                if (filters.dateFrom || filters.dateTo) {
+                    const bookmarkDate = new Date(bookmark.timestamp);
+                    if (filters.dateFrom && bookmarkDate < new Date(filters.dateFrom)) {
+                        return false;
+                    }
+                    if (filters.dateTo && bookmarkDate > new Date(filters.dateTo + 'T23:59:59')) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            // Apply sorting
+            filteredBookmarks.sort((a, b) => {
+                let aVal, bVal;
+
+                switch (sort.field) {
+                    case 'timestamp':
+                        aVal = new Date(a.timestamp);
+                        bVal = new Date(b.timestamp);
+                        break;
+                    case 'title':
+                        aVal = a.title.toLowerCase();
+                        bVal = b.title.toLowerCase();
+                        break;
+                    case 'domain':
+                        aVal = a.domain || '';
+                        bVal = b.domain || '';
+                        break;
+                    case 'action':
+                        aVal = a.action || '';
+                        bVal = b.action || '';
+                        break;
+                    default:
+                        aVal = a.timestamp;
+                        bVal = b.timestamp;
+                }
+
+                if (aVal < bVal) return sort.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            updateResults();
+            updateActiveFilters(filters);
+        }
+
+        function updateResults() {
+            document.getElementById('resultsCount').textContent = filteredBookmarks.length;
+            document.getElementById('totalCount').textContent = allBookmarks.length;
+
+            const content = document.getElementById('content');
+
+            if (filteredBookmarks.length === 0) {
+                content.innerHTML = `
+                    <div class="no-results">
+                        <h3>No bookmarks found</h3>
+                        <p>Try adjusting your filters to see more results.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const bookmarksHTML = filteredBookmarks.map(bookmark => `
+                <div class="bookmark-card">
+                    <div class="bookmark-header">
+                        <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-title">${escapeHtml(bookmark.title)}</a>
+                        <div class="bookmark-status">
+                            ${bookmark.action ? `<span class="action-badge action-${bookmark.action}">${escapeHtml(bookmark.action)}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="bookmark-meta">
+                        <span>🌐 ${escapeHtml(bookmark.domain || 'Unknown')}</span>
+                        <span>📅 ${formatDate(bookmark.timestamp)}</span>
+                        <span>⏰ ${escapeHtml(bookmark.age || '')}</span>
+                    </div>
+                    
+                    ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
+                    
+                    <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
+                    
+                    <div class="bookmark-actions">
+                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
+                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
+                    </div>
+                </div>
+            `).join('');
+
+            content.innerHTML = `<div class="bookmarks-grid">${bookmarksHTML}</div>`;
+        }
+
+        function updateActiveFilters(filters) {
+            const activeFilters = [];
+            
+            if (filters.search) activeFilters.push(`Search: "${filters.search}"`);
+            if (filters.action) activeFilters.push(`Action: ${filters.action}`);
+            if (filters.domain) activeFilters.push(`Domain: ${filters.domain}`);
+            if (filters.dateFrom) activeFilters.push(`From: ${formatDate(filters.dateFrom)}`);
+            if (filters.dateTo) activeFilters.push(`To: ${formatDate(filters.dateTo)}`);
+
+            const activeFiltersElement = document.getElementById('activeFilters');
+            if (activeFilters.length > 0) {
+                activeFiltersElement.textContent = `Active filters: ${activeFilters.join(', ')}`;
+                activeFiltersElement.style.display = 'block';
+            } else {
+                activeFiltersElement.style.display = 'none';
+            }
+        }
+
+        function clearAllFilters() {
+            document.getElementById('searchFilter').value = '';
+            document.getElementById('actionFilter').value = '';
+            document.getElementById('domainFilter').value = '';
+            document.getElementById('dateFromFilter').value = '';
+            document.getElementById('dateToFilter').value = '';
+            document.getElementById('sortField').value = 'timestamp';
+            document.getElementById('sortDirection').value = 'desc';
+            applyFilters();
+        }
+
+        // Utility functions
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown';
+            
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } catch (e) {
+                return dateString;
+            }
+        }
+
+        // Preview and Edit functions
+        function previewBookmark(url, title, bookmarkId) {
+            // Open URL in a new window for preview
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function editBookmark(bookmarkId) {
+            // Redirect to dashboard with edit modal
+            window.location.href = `/?edit=${bookmarkId}`;
+        }
+        
+        // Navigation functions
+        function goBack() {
+            // Go back to previous page in browser history
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                // Fallback to dashboard if no history
+                goToDashboard();
+            }
+        }
+        
+        function goToDashboard() {
+            window.location.href = '/';
+        }
+        
+        function goToProjects() {
+            window.location.href = '/projects';
+        }
+    </script>
+</body>
+</html>

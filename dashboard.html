@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMinder Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid;
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-card.triage {
+            border-left-color: #f56565;
+        }
+
+        .stat-card.projects {
+            border-left-color: #4299e1;
+        }
+
+        .stat-card.share {
+            border-left-color: #48bb78;
+        }
+
+        .stat-card.archived {
+            border-left-color: #718096;
+        }
+
+        .stat-card.total {
+            border-left-color: #805ad5;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: #f8fafc;
+            padding: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .section-content {
+            padding: 1.5rem;
+        }
+
+        .triage-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .triage-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 3px solid #e2e8f0;
+        }
+
+        .triage-info {
+            flex: 1;
+        }
+
+        .triage-title {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .triage-meta {
+            font-size: 0.85rem;
+            color: #718096;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .triage-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3182ce;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-archive {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-archive:hover {
+            background: #5a6b7b;
+        }
+
+        .btn-preview {
+            background: #805ad5;
+            color: white;
+        }
+
+        .btn-preview:hover {
+            background: #6b46c1;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .project-card {
+            padding: 1.5rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #4299e1;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .project-card:hover {
+            background: #edf2f7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .project-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+        }
+
+        .project-meta {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-bottom: 1rem;
+        }
+
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-stale {
+            background: #fed7aa;
+            color: #9c4221;
+        }
+
+        .status-inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #718096;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .page-btn {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e2e8f0;
+            background: white;
+            color: #4a5568;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover {
+            background: #f7fafc;
+            border-color: #cbd5e0;
+        }
+
+        .page-btn.active {
+            background: #4299e1;
+            color: white;
+            border-color: #4299e1;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-footer {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+            color: white;
+        }
+
+        .footer-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .icon-btn:active {
+            transform: scale(0.95);
+        }
+
+        .modal-body {
+            padding: 0;
+            max-height: 70vh;
+            overflow: hidden;
+        }
+
+        .project-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .project-detail-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .bookmark-item {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 3px solid #4299e1;
+        }
+
+        .bookmark-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+        }
+
+        .bookmark-url {
+            color: #4299e1;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: block;
+            word-break: break-all;
+        }
+
+        .bookmark-url:hover {
+            text-decoration: underline;
+        }
+
+        .bookmark-description {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+
+        .bookmark-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
+
+        .bookmark-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .preview-container {
+            position: relative;
+            background: #f7fafc;
+            overflow: hidden;
+            height: 100%;
+        }
+
+        #previewFrame {
+            border: none;
+            background: white;
+        }
+
+        .preview-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 500px;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .preview-error {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 500px;
+            color: #e53e3e;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .preview-error h3 {
+            margin-bottom: 1rem;
+        }
+
+        .edit-form-container {
+            padding: 2rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .edit-form-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #2d3748;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            background: white;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .triage-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            
+            #previewFrame {
+                height: 400px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 1% auto;
+                max-height: 95vh;
+            }
+            
+            .modal-footer {
+                padding: 0.75rem 1rem;
+            }
+            
+            .modal-title {
+                font-size: 1.1rem;
+            }
+            
+            .icon-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card triage">
+                <div class="stat-number" id="triageCount">-</div>
+                <div class="stat-label">Needs Triage</div>
+            </div>
+            <div class="stat-card projects">
+                <div class="stat-number" id="projectsCount">-</div>
+                <div class="stat-label">Active Projects</div>
+            </div>
+            <div class="stat-card share">
+                <div class="stat-number" id="shareCount">-</div>
+                <div class="stat-label">Ready to Share</div>
+            </div>
+            <div class="stat-card archived">
+                <div class="stat-number" id="archivedCount">-</div>
+                <div class="stat-label">Archived</div>
+            </div>
+            <div class="stat-card total">
+                <div class="stat-number" id="totalCount">-</div>
+                <div class="stat-label">Total Bookmarks</div>
+            </div>
+        </div>
+
+        <div class="section" id="triageSection">
+            <div class="section-header">
+                <h2 class="section-title">Triage Queue</h2>
+                <button class="btn btn-primary" onclick="refreshTriage()">Refresh</button>
+            </div>
+            <div class="section-content">
+                <div class="loading" id="triageLoading">Loading triage items...</div>
+                <div class="triage-grid" id="triageGrid" style="display: none;"></div>
+                <div class="pagination" id="triagePagination" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="section" id="projectsSection">
+            <div class="section-header">
+                <h2 class="section-title">Active Projects</h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="/projects" class="btn btn-secondary">View All Projects</a>
+                    <button class="btn btn-primary" onclick="refreshProjects()">Refresh</button>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="loading" id="projectsLoading">Loading projects...</div>
+                <div class="projects-grid" id="projectsGrid" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Detail Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalProjectTitle">Project Details</h2>
+                <button class="close" onclick="closeProjectModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="loading" id="projectDetailLoading">Loading project details...</div>
+                <div id="projectDetailContent" style="display: none;">
+                    <div class="project-detail-header">
+                        <div>
+                            <span class="status-badge" id="projectDetailStatus">active</span>
+                        </div>
+                        <div class="project-detail-stats">
+                            <span id="projectDetailLinkCount">0 links</span>
+                            <span id="projectDetailLastUpdated">Updated recently</span>
+                        </div>
+                    </div>
+                    <div id="projectBookmarks"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="preview-container">
+                    <iframe id="previewFrame" src="" frameborder="0" style="width: 100%; height: 500px;"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <h2 class="modal-title" id="previewTitle">Preview</h2>
+                <div class="footer-actions">
+                    <button class="icon-btn" id="openInNewWindow" onclick="openInNewWindow()" title="Open in New Window">↗</button>
+                    <button class="icon-btn close" onclick="closePreviewModal()" title="Close">&times;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Bookmark Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="edit-form-container">
+                    <h3 class="edit-form-title">Edit Bookmark</h3>
+                    <form id="editForm">
+                        <div class="form-group">
+                            <label for="editTitle">Title</label>
+                            <input type="text" id="editTitle" name="title" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editURL">URL</label>
+                            <input type="url" id="editURL" name="url" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editDescription">Description</label>
+                            <textarea id="editDescription" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="editAction">Action</label>
+                            <select id="editAction" name="action">
+                                <option value="">No action</option>
+                                <option value="read-later">Read Later</option>
+                                <option value="working">Working</option>
+                                <option value="share">Share</option>
+                                <option value="archived">Archived</option>
+                                <option value="irrelevant">Irrelevant</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="topicGroup" style="display: none;">
+                            <label for="editTopic">Topic</label>
+                            <input type="text" id="editTopic" name="topic" placeholder="Enter project topic...">
+                        </div>
+                        <div class="form-group" id="shareToGroup" style="display: none;">
+                            <label for="editShareTo">Share To</label>
+                            <input type="text" id="editShareTo" name="shareTo" placeholder="Enter recipient...">
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <h2 class="modal-title">Edit Bookmark Details</h2>
+                <div class="footer-actions">
+                    <button class="icon-btn" onclick="saveBookmarkChanges()" title="Save Changes">💾</button>
+                    <button class="icon-btn close" onclick="closeEditModal()" title="Close">&times;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentTriagePage = 0;
+        let currentPreviewUrl = '';
+        let currentPreviewId = null;
+        let currentEditBookmark = null;
+        const triageLimit = 10;
+
+        // API functions
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats/summary');
+                const data = await response.json();
+                updateStatsDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+            }
+        }
+
+        async function fetchTriageQueue(offset = 0) {
+            try {
+                const response = await fetch(`/api/bookmarks/triage?limit=${triageLimit}&offset=${offset}`);
+                const data = await response.json();
+                updateTriageDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch triage queue:', error);
+                document.getElementById('triageLoading').textContent = 'Failed to load triage items';
+            }
+        }
+
+        async function fetchProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const data = await response.json();
+                updateProjectsDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch projects:', error);
+                document.getElementById('projectsLoading').textContent = 'Failed to load projects';
+            }
+        }
+
+        async function fetchProjectDetail(topic) {
+            try {
+                const encodedTopic = encodeURIComponent(topic);
+                const response = await fetch(`/api/projects/${encodedTopic}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch project detail: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                updateProjectDetailDisplay(data);
+            } catch (error) {
+                console.error('Failed to fetch project detail:', error);
+                document.getElementById('projectDetailLoading').textContent = 'Failed to load project details';
+            }
+        }
+
+        // Display update functions
+        function updateStatsDisplay(stats) {
+            document.getElementById('triageCount').textContent = stats.needsTriage || 0;
+            document.getElementById('projectsCount').textContent = stats.activeProjects || 0;
+            document.getElementById('shareCount').textContent = stats.readyToShare || 0;
+            document.getElementById('archivedCount').textContent = stats.archived || 0;
+            document.getElementById('totalCount').textContent = stats.totalBookmarks || 0;
+        }
+
+        function updateTriageDisplay(data) {
+            const loading = document.getElementById('triageLoading');
+            const grid = document.getElementById('triageGrid');
+            const pagination = document.getElementById('triagePagination');
+
+            loading.style.display = 'none';
+
+            if (!data.bookmarks || data.bookmarks.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No items need triage</div>';
+                grid.style.display = 'block';
+                pagination.style.display = 'none';
+                return;
+            }
+
+            grid.innerHTML = data.bookmarks.map(bookmark => `
+                <div class="triage-item">
+                    <div class="triage-info">
+                        <div class="triage-title">${escapeHtml(bookmark.title)}</div>
+                        <div class="triage-meta">
+                            <span>${escapeHtml(bookmark.domain || '')}</span>
+                            <span>${escapeHtml(bookmark.age || '')}</span>
+                            <span>Suggested: ${escapeHtml(bookmark.suggested || '')}</span>
+                        </div>
+                    </div>
+                    <div class="triage-actions">
+                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
+                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
+                        <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id}, '${escapeHtml(bookmark.topic || '').replace(/'/g, '\\\'').replace(/"/g, '\\"')}')">Working</button>
+                        <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
+                        <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
+                    </div>
+                </div>
+            `).join('');
+
+            grid.style.display = 'block';
+
+            // Update pagination
+            updateTriagePagination(data);
+        }
+
+        function updateTriagePagination(data) {
+            const pagination = document.getElementById('triagePagination');
+            const totalPages = Math.ceil(data.total / triageLimit);
+            const currentPage = Math.floor(data.offset / triageLimit);
+
+            if (totalPages <= 1) {
+                pagination.style.display = 'none';
+                return;
+            }
+
+            let paginationHTML = '';
+
+            // Previous button
+            paginationHTML += `<button class="page-btn" ${currentPage === 0 ? 'disabled' : ''} onclick="goToTriagePage(${currentPage - 1})">Previous</button>`;
+
+            // Page numbers
+            for (let i = 0; i < totalPages; i++) {
+                if (i === currentPage) {
+                    paginationHTML += `<button class="page-btn active">${i + 1}</button>`;
+                } else {
+                    paginationHTML += `<button class="page-btn" onclick="goToTriagePage(${i})">${i + 1}</button>`;
+                }
+            }
+
+            // Next button
+            paginationHTML += `<button class="page-btn" ${currentPage === totalPages - 1 ? 'disabled' : ''} onclick="goToTriagePage(${currentPage + 1})">Next</button>`;
+
+            pagination.innerHTML = paginationHTML;
+            pagination.style.display = 'flex';
+        }
+
+        function updateProjectsDisplay(data) {
+            const loading = document.getElementById('projectsLoading');
+            const grid = document.getElementById('projectsGrid');
+
+            loading.style.display = 'none';
+
+            if (!data.activeProjects || data.activeProjects.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No active projects</div>';
+                grid.style.display = 'block';
+                return;
+            }
+
+            grid.innerHTML = data.activeProjects.map(project => `
+                <div class="project-card" onclick="openProjectDetail(${project.id})">
+                    <div class="project-title">${escapeHtml(project.topic)}</div>
+                    <div class="project-meta">
+                        ${project.linkCount} links • Updated ${formatDate(project.lastUpdated)}
+                    </div>
+                    <span class="status-badge status-${project.status}">${project.status}</span>
+                </div>
+            `).join('');
+
+            grid.style.display = 'grid';
+        }
+
+        function updateProjectDetailDisplay(project) {
+            const loading = document.getElementById('projectDetailLoading');
+            const content = document.getElementById('projectDetailContent');
+            
+            loading.style.display = 'none';
+            
+            // Update header
+            document.getElementById('modalProjectTitle').textContent = project.topic;
+            document.getElementById('projectDetailStatus').textContent = project.status;
+            document.getElementById('projectDetailStatus').className = `status-badge status-${project.status}`;
+            document.getElementById('projectDetailLinkCount').textContent = `${project.linkCount} links`;
+            document.getElementById('projectDetailLastUpdated').textContent = `Updated ${formatDate(project.lastUpdated)}`;
+            
+            // Update bookmarks
+            const bookmarksContainer = document.getElementById('projectBookmarks');
+            if (!project.bookmarks || project.bookmarks.length === 0) {
+                bookmarksContainer.innerHTML = '<div class="empty-state">No bookmarks in this project</div>';
+            } else {
+                bookmarksContainer.innerHTML = project.bookmarks.map(bookmark => `
+                    <div class="bookmark-item">
+                        <div class="bookmark-title">${escapeHtml(bookmark.title)}</div>
+                        <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
+                        ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
+                        <div class="bookmark-meta">
+                            <span>${escapeHtml(bookmark.domain || '')}</span>
+                            <span>${escapeHtml(bookmark.age || '')}</span>
+                            <span>Action: ${escapeHtml(bookmark.action || 'none')}</span>
+                        </div>
+                        <div class="bookmark-actions">
+                            <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
+                            <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
+                            <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            content.style.display = 'block';
+        }
+
+        // Navigation functions
+        function openProjectDetail(projectId) {
+            // Navigate to the enhanced project detail page using project ID
+            window.location.href = `/project-detail?id=${projectId}`;
+        }
+        
+        // Legacy modal functions (kept for backwards compatibility)
+        function openProjectModal(topic) {
+            const modal = document.getElementById('projectModal');
+            const loading = document.getElementById('projectDetailLoading');
+            const content = document.getElementById('projectDetailContent');
+            
+            // Show modal
+            modal.style.display = 'block';
+            
+            // Reset state
+            loading.style.display = 'block';
+            content.style.display = 'none';
+            
+            // Fetch and display project details
+            fetchProjectDetail(topic);
+        }
+
+        function closeProjectModal() {
+            document.getElementById('projectModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const projectModal = document.getElementById('projectModal');
+            const previewModal = document.getElementById('previewModal');
+            const editModal = document.getElementById('editModal');
+            
+            if (event.target === projectModal) {
+                closeProjectModal();
+            } else if (event.target === previewModal) {
+                closePreviewModal();
+            } else if (event.target === editModal) {
+                closeEditModal();
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                const previewModal = document.getElementById('previewModal');
+                const projectModal = document.getElementById('projectModal');
+                const editModal = document.getElementById('editModal');
+                
+                if (previewModal.style.display === 'block') {
+                    closePreviewModal();
+                } else if (projectModal.style.display === 'block') {
+                    closeProjectModal();
+                } else if (editModal.style.display === 'block') {
+                    closeEditModal();
+                }
+            }
+        });
+
+        // Action functions
+
+        async function markAsWorking(bookmarkId, existingTopic = '') {
+            const topic = prompt('Enter topic for this project:', existingTopic);
+            if (topic) {
+                await updateBookmarkAction(bookmarkId, 'working', topic);
+            }
+        }
+
+        async function markAsShare(bookmarkId) {
+            await updateBookmarkAction(bookmarkId, 'share');
+        }
+
+        async function markAsArchived(bookmarkId) {
+            await updateBookmarkAction(bookmarkId, 'archived');
+        }
+
+        async function updateBookmarkAction(bookmarkId, action, topic = '') {
+            try {
+                const response = await fetch(`/api/bookmarks/${bookmarkId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: action,
+                        topic: topic
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to update bookmark: ${response.status}`);
+                }
+
+                console.log(`Successfully marked bookmark ${bookmarkId} as ${action}`);
+                
+                // Refresh all relevant sections
+                refreshTriage();
+                refreshProjects();
+                fetchStats();
+                
+                // Close project modal if open
+                closeProjectModal();
+                
+            } catch (error) {
+                console.error('Failed to update bookmark:', error);
+                alert('Failed to update bookmark. Please try again.');
+            }
+        }
+
+        function goToTriagePage(page) {
+            currentTriagePage = page;
+            fetchTriageQueue(page * triageLimit);
+        }
+
+        // Refresh functions
+        function refreshTriage() {
+            document.getElementById('triageLoading').style.display = 'block';
+            document.getElementById('triageGrid').style.display = 'none';
+            fetchTriageQueue(currentTriagePage * triageLimit);
+        }
+
+        function refreshProjects() {
+            document.getElementById('projectsLoading').style.display = 'block';
+            document.getElementById('projectsGrid').style.display = 'none';
+            fetchProjects();
+        }
+
+        // Preview functions
+        function previewBookmark(url, title, bookmarkId) {
+            currentPreviewUrl = url;
+            currentPreviewId = bookmarkId;
+            
+            const modal = document.getElementById('previewModal');
+            const previewTitle = document.getElementById('previewTitle');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            // Update modal title
+            previewTitle.textContent = `Preview: ${title}`;
+            
+            // Show modal
+            modal.style.display = 'block';
+            
+            // Load URL in iframe with error handling
+            try {
+                previewFrame.src = url;
+                
+                // Handle iframe load errors
+                previewFrame.onload = function() {
+                    // Successfully loaded
+                };
+                
+                previewFrame.onerror = function() {
+                    showPreviewError('Unable to load preview for this URL. Some sites prevent embedding.');
+                };
+                
+            } catch (error) {
+                showPreviewError('Unable to load preview for this URL.');
+            }
+        }
+        
+        function showPreviewError(message) {
+            const previewContainer = document.querySelector('.preview-container');
+            previewContainer.innerHTML = `
+                <div class="preview-error">
+                    <h3>Preview Not Available</h3>
+                    <p>${message}</p>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; color: #718096;">
+                        Use the ↗ button in the footer to open in a new window.
+                    </p>
+                </div>
+            `;
+        }
+        
+        function openInNewWindow() {
+            if (currentPreviewUrl) {
+                window.open(currentPreviewUrl, '_blank', 'noopener,noreferrer');
+            }
+        }
+        
+        function closePreviewModal() {
+            const modal = document.getElementById('previewModal');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            modal.style.display = 'none';
+            previewFrame.src = ''; // Clear iframe source to stop loading
+            currentPreviewUrl = '';
+            currentPreviewId = null;
+        }
+
+        // Edit functions
+        async function editBookmark(bookmarkId) {
+            try {
+                // Fetch bookmark details from the triage API to get current data
+                const response = await fetch(`/api/bookmarks/triage?limit=1000&offset=0`);
+                const data = await response.json();
+                const bookmark = data.bookmarks.find(b => b.id === bookmarkId);
+                
+                if (!bookmark) {
+                    alert('Bookmark not found');
+                    return;
+                }
+                
+                currentEditBookmark = bookmark;
+                showEditModal(bookmark);
+                
+            } catch (error) {
+                console.error('Failed to fetch bookmark details:', error);
+                alert('Failed to load bookmark details. Please try again.');
+            }
+        }
+        
+        function showEditModal(bookmark) {
+            const modal = document.getElementById('editModal');
+            
+            // Populate form fields
+            document.getElementById('editTitle').value = bookmark.title || '';
+            document.getElementById('editURL').value = bookmark.url || '';
+            document.getElementById('editDescription').value = bookmark.description || '';
+            document.getElementById('editAction').value = bookmark.action || '';
+            document.getElementById('editTopic').value = bookmark.topic || '';
+            document.getElementById('editShareTo').value = bookmark.shareTo || '';
+            
+            // Show/hide conditional fields based on action
+            updateEditFormVisibility();
+            
+            // Show modal
+            modal.style.display = 'block';
+        }
+        
+        function updateEditFormVisibility() {
+            const action = document.getElementById('editAction').value;
+            const topicGroup = document.getElementById('topicGroup');
+            const shareToGroup = document.getElementById('shareToGroup');
+            
+            // Show topic field for working action
+            if (action === 'working') {
+                topicGroup.style.display = 'block';
+            } else {
+                topicGroup.style.display = 'none';
+            }
+            
+            // Show shareTo field for share action
+            if (action === 'share') {
+                shareToGroup.style.display = 'block';
+            } else {
+                shareToGroup.style.display = 'none';
+            }
+        }
+        
+        async function saveBookmarkChanges() {
+            if (!currentEditBookmark) {
+                alert('No bookmark selected for editing');
+                return;
+            }
+            
+            const form = document.getElementById('editForm');
+            const formData = new FormData(form);
+            
+            // Validate required fields
+            const title = formData.get('title').trim();
+            const url = formData.get('url').trim();
+            
+            if (!title || !url) {
+                alert('Title and URL are required fields');
+                return;
+            }
+            
+            try {
+                // Prepare update data
+                const updateData = {
+                    title: title,
+                    url: url,
+                    description: formData.get('description').trim(),
+                    action: formData.get('action'),
+                    topic: formData.get('topic').trim(),
+                    shareTo: formData.get('shareTo').trim()
+                };
+                
+                // Call API to update bookmark
+                const response = await fetch(`/api/bookmarks/${currentEditBookmark.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to update bookmark: ${response.status}`);
+                }
+                
+                console.log(`Successfully updated bookmark ${currentEditBookmark.id}`);
+                
+                // Close modal and refresh triage
+                closeEditModal();
+                refreshTriage();
+                fetchStats();
+                
+            } catch (error) {
+                console.error('Failed to update bookmark:', error);
+                alert('Failed to update bookmark. Please try again.');
+            }
+        }
+        
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            modal.style.display = 'none';
+            currentEditBookmark = null;
+            
+            // Reset form
+            document.getElementById('editForm').reset();
+            updateEditFormVisibility();
+        }
+        
+        // Add event listener for action dropdown change
+        document.addEventListener('DOMContentLoaded', function() {
+            const actionSelect = document.getElementById('editAction');
+            if (actionSelect) {
+                actionSelect.addEventListener('change', updateEditFormVisibility);
+            }
+        });
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            try {
+                const date = new Date(dateString);
+                const now = new Date();
+                const diffTime = Math.abs(now - date);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 1) {
+                    return 'yesterday';
+                } else if (diffDays < 7) {
+                    return `${diffDays} days ago`;
+                } else {
+                    return date.toLocaleDateString();
+                }
+            } catch (error) {
+                return 'recently';
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchStats();
+            fetchTriageQueue();
+            fetchProjects();
+
+            // Check for edit parameter in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const editBookmarkId = urlParams.get('edit');
+            if (editBookmarkId) {
+                // Auto-open edit modal for the specified bookmark
+                setTimeout(() => {
+                    editBookmark(parseInt(editBookmarkId));
+                }, 1000); // Wait for triage data to load
+            }
+
+            // Auto-refresh every 5 minutes
+            setInterval(() => {
+                fetchStats();
+            }, 5 * 60 * 1000);
+        });
+    </script>
+</body>
+</html>

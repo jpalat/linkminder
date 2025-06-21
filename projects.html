@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMinder - Projects</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            min-height: 100vh;
+            color: #2d3748;
+        }
+        
+        .header {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+        
+        .header-nav {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #38a169, #2f855a);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .projects-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .projects-stats {
+            display: flex;
+            gap: 2rem;
+            color: white;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 800;
+            display: block;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .filter-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            justify-content: center;
+        }
+        
+        .tab {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            background: rgba(255,255,255,0.9);
+            color: #2d3748;
+        }
+        
+        .tab:hover:not(.active) {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .project-card {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+        
+        .project-card.active {
+            border-left: 4px solid #48bb78;
+        }
+        
+        .project-card.stale {
+            border-left: 4px solid #ed8936;
+        }
+        
+        .project-card.inactive {
+            border-left: 4px solid #e53e3e;
+            opacity: 0.8;
+        }
+        
+        .project-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        
+        .project-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+        
+        .project-status {
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .status-stale {
+            background: #fbd38d;
+            color: #7b341e;
+        }
+        
+        .status-inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .project-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: #718096;
+            margin-bottom: 1rem;
+        }
+        
+        .link-count {
+            font-weight: 600;
+            color: #4299e1;
+        }
+        
+        .last-updated {
+            font-style: italic;
+        }
+        
+        .project-description {
+            color: #4a5568;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .project-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .action-btn {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn.view {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .action-btn.share {
+            background: #48bb78;
+            color: white;
+        }
+        
+        .action-btn.archive {
+            background: #718096;
+            color: white;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .recent-bookmarks {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .recent-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #718096;
+            margin-bottom: 0.5rem;
+        }
+        
+        .bookmark-item {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f7fafc;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .bookmark-item:last-child {
+            border-bottom: none;
+        }
+
+        .bookmark-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .bookmark-title-small {
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .bookmark-url-small {
+            color: #718096;
+            font-size: 0.7rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bookmark-mini-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .mini-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: #718096;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+        }
+
+        .mini-btn:hover {
+            background: rgba(255,255,255,0.3);
+            color: #4a5568;
+            transform: scale(1.1);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .empty-state p {
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+            
+            .projects-header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .projects-stats {
+                justify-content: center;
+            }
+            
+            .filter-tabs {
+                flex-wrap: wrap;
+            }
+            
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>📂 Projects</h1>
+            <div class="header-nav">
+                <a href="#" class="btn" onclick="goBack()">← Dashboard</a>
+                <button class="btn btn-primary" onclick="createNewProject()">+ New Project</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="projects-header">
+            <div class="projects-stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="activeCount">5</span>
+                    <span class="stat-label">Active</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="staleCount">2</span>
+                    <span class="stat-label">Stale</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="totalLinks">127</span>
+                    <span class="stat-label">Total Links</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="filter-tabs">
+            <button class="tab active" onclick="filterProjects('all')">All Projects</button>
+            <button class="tab" onclick="filterProjects('active')">Active</button>
+            <button class="tab" onclick="filterProjects('stale')">Stale</button>
+            <button class="tab" onclick="filterProjects('inactive')">Inactive</button>
+        </div>
+        
+        <div class="projects-grid" id="projectsGrid">
+            <!-- Projects will be loaded here -->
+        </div>
+    </div>
+    
+    <script>
+        let currentFilter = 'all';
+        
+        let allProjects = [];
+        
+        // API functions
+        async function fetchProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const data = await response.json();
+                allProjects = data.activeProjects || [];
+                loadProjects(currentFilter);
+                updateStats();
+            } catch (error) {
+                console.error('Failed to fetch projects:', error);
+                document.getElementById('projectsGrid').innerHTML = 
+                    '<div class="empty-state"><h3>Failed to load projects</h3><p>Please try refreshing the page.</p></div>';
+            }
+        }
+        
+        function loadProjects(filter = 'all') {
+            currentFilter = filter;
+            let filteredProjects = allProjects;
+            
+            if (filter !== 'all') {
+                filteredProjects = allProjects.filter(project => project.status === filter);
+            }
+            
+            const projectsGrid = document.getElementById('projectsGrid');
+            
+            if (filteredProjects.length === 0) {
+                projectsGrid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No ${filter === 'all' ? '' : filter} projects found</h3>
+                        <p>Start organizing your bookmarks by creating your first project!</p>
+                        <button class="btn btn-primary" onclick="createNewProject()">Create Project</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            projectsGrid.innerHTML = '';
+            
+            // Create project cards asynchronously
+            Promise.all(filteredProjects.map(createProjectCard)).then(cards => {
+                cards.forEach(card => {
+                    projectsGrid.appendChild(card);
+                });
+            });
+            
+            updateStats();
+        }
+        
+        async function createProjectCard(project) {
+            const card = document.createElement('div');
+            card.className = `project-card ${project.status}`;
+            card.onclick = () => viewProject(project.id);
+            
+            const statusClass = `status-${project.status}`;
+            
+            // Get recent bookmarks for this project
+            let recentBookmarksHtml = '<div class="bookmark-item">Loading recent bookmarks...</div>';
+            try {
+                const response = await fetch(`/api/projects/${encodeURIComponent(project.topic)}`);
+                if (response.ok) {
+                    const projectDetail = await response.json();
+                    const recentBookmarks = projectDetail.bookmarks.slice(0, 2); // Get first 2 bookmarks
+                    recentBookmarksHtml = recentBookmarks.map(bookmark => `
+                        <div class="bookmark-item">
+                            <div class="bookmark-info">
+                                <div class="bookmark-title-small">${escapeHtml(bookmark.title)}</div>
+                                <div class="bookmark-url-small">${escapeHtml(getDomain(bookmark.url))}</div>
+                            </div>
+                            <div class="bookmark-mini-actions">
+                                <button class="mini-btn" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})" title="Preview">👁️</button>
+                                <button class="mini-btn" onclick="editBookmark(${bookmark.id})" title="Edit">✏️</button>
+                            </div>
+                        </div>
+                    `).join('') || '<div class="bookmark-item">No bookmarks yet</div>';
+                }
+            } catch (error) {
+                console.error('Failed to fetch recent bookmarks:', error);
+                recentBookmarksHtml = '<div class="bookmark-item">Failed to load recent bookmarks</div>';
+            }
+            
+            card.innerHTML = `
+                <div class="project-header">
+                    <div>
+                        <div class="project-title">${escapeHtml(project.topic)}</div>
+                    </div>
+                    <div class="project-status ${statusClass}">${project.status}</div>
+                </div>
+                
+                <div class="project-meta">
+                    <span class="link-count">${project.linkCount} links</span>
+                    <span class="last-updated">${formatDate(project.lastUpdated)}</span>
+                </div>
+                
+                <div class="project-actions">
+                    <button class="action-btn view" onclick="event.stopPropagation(); viewProject(${project.id})">
+                        👁️ View
+                    </button>
+                    <button class="action-btn share" onclick="event.stopPropagation(); shareProject(${project.id})">
+                        📤 Share
+                    </button>
+                    <button class="action-btn archive" onclick="event.stopPropagation(); archiveProject(${project.id})">
+                        📦 Archive
+                    </button>
+                </div>
+                
+                <div class="recent-bookmarks">
+                    <div class="recent-title">Recent additions:</div>
+                    ${recentBookmarksHtml}
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        function filterProjects(filter) {
+            // Update active tab
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            loadProjects(filter);
+        }
+        
+        function updateStats() {
+            const activeProjects = allProjects.filter(p => p.status === 'active').length;
+            const staleProjects = allProjects.filter(p => p.status === 'stale').length;
+            const totalLinks = allProjects.reduce((sum, p) => sum + p.linkCount, 0);
+            
+            document.getElementById('activeCount').textContent = activeProjects;
+            document.getElementById('staleCount').textContent = staleProjects;
+            document.getElementById('totalLinks').textContent = totalLinks;
+        }
+        
+        function viewProject(projectId) {
+            // Navigate to the enhanced project detail page
+            window.location.href = `/project-detail?id=${projectId}`;
+        }
+        
+        function shareProject(projectId) {
+            // In real app: show sharing modal or generate share link
+            alert(`Share project ${projectId} - would show sharing options`);
+        }
+        
+        function archiveProject(projectId) {
+            if (confirm('Archive this project and all its bookmarks?')) {
+                // In real app: API call to archive project
+                alert(`Archive project ${projectId} - would archive project and bookmarks`);
+            }
+        }
+        
+        function createNewProject() {
+            const projectName = prompt('Enter project name:');
+            if (projectName) {
+                // In real app: POST to create new project/topic
+                alert(`Create new project: ${projectName}`);
+            }
+        }
+
+        // Preview and Edit functions
+        function previewBookmark(url, title, bookmarkId) {
+            // Open URL in a new window for preview
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function editBookmark(bookmarkId) {
+            // Redirect to dashboard with edit modal
+            window.location.href = `/?edit=${bookmarkId}`;
+        }
+        
+        function goBack() {
+            window.history.back();
+            // In real app: window.location.href = '/';
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function getDomain(url) {
+            try {
+                const urlObj = new URL(url);
+                return urlObj.hostname;
+            } catch (error) {
+                return url;
+            }
+        }
+        
+        function formatDate(dateString) {
+            try {
+                const date = new Date(dateString);
+                const now = new Date();
+                const diffTime = Math.abs(now - date);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 1) {
+                    return 'yesterday';
+                } else if (diffDays < 7) {
+                    return `${diffDays} days ago`;
+                } else {
+                    return date.toLocaleDateString();
+                }
+            } catch (error) {
+                return 'recently';
+            }
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchProjects();
+        });
+    </script>
+</body>
+</html>
