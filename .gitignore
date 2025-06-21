@@ -1,3 +1,6 @@
 bookminderapi
 *.csv
 *.db
+*db-*
+coverage.out
+*.log
