@@ -281,21 +281,64 @@
             padding: 0.5rem 0;
             border-bottom: 1px solid #f7fafc;
             font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         .bookmark-item:last-child {
             border-bottom: none;
+        }
+
+        .bookmark-info {
+            flex: 1;
+            min-width: 0;
         }
         
         .bookmark-title-small {
             color: #2d3748;
             font-weight: 600;
             margin-bottom: 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .bookmark-url-small {
             color: #718096;
             font-size: 0.7rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bookmark-mini-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .mini-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: #718096;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+        }
+
+        .mini-btn:hover {
+            background: rgba(255,255,255,0.3);
+            color: #4a5568;
+            transform: scale(1.1);
         }
         
         .empty-state {
@@ -449,8 +492,14 @@
                     const recentBookmarks = projectDetail.bookmarks.slice(0, 2); // Get first 2 bookmarks
                     recentBookmarksHtml = recentBookmarks.map(bookmark => `
                         <div class="bookmark-item">
-                            <div class="bookmark-title-small">${escapeHtml(bookmark.title)}</div>
-                            <div class="bookmark-url-small">${escapeHtml(getDomain(bookmark.url))}</div>
+                            <div class="bookmark-info">
+                                <div class="bookmark-title-small">${escapeHtml(bookmark.title)}</div>
+                                <div class="bookmark-url-small">${escapeHtml(getDomain(bookmark.url))}</div>
+                            </div>
+                            <div class="bookmark-mini-actions">
+                                <button class="mini-btn" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})" title="Preview">👁️</button>
+                                <button class="mini-btn" onclick="editBookmark(${bookmark.id})" title="Edit">✏️</button>
+                            </div>
                         </div>
                     `).join('') || '<div class="bookmark-item">No bookmarks yet</div>';
                 }
@@ -536,6 +585,17 @@
                 // In real app: POST to create new project/topic
                 alert(`Create new project: ${projectName}`);
             }
+        }
+
+        // Preview and Edit functions
+        function previewBookmark(url, title, bookmarkId) {
+            // Open URL in a new window for preview
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function editBookmark(bookmarkId) {
+            // Redirect to dashboard with edit modal
+            window.location.href = `/?edit=${bookmarkId}`;
         }
         
         function goBack() {

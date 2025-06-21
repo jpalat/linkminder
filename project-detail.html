@@ -228,6 +228,37 @@
             display: flex;
             gap: 8px;
             align-items: center;
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-preview {
+            background: #805ad5;
+            color: white;
+        }
+
+        .btn-preview:hover {
+            background: #6b46c1;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
         }
         
         .action-badge {
@@ -657,7 +688,7 @@
                 <div class="bookmark-card">
                     <div class="bookmark-header">
                         <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-title">${escapeHtml(bookmark.title)}</a>
-                        <div class="bookmark-actions">
+                        <div class="bookmark-status">
                             ${bookmark.action ? `<span class="action-badge action-${bookmark.action}">${escapeHtml(bookmark.action)}</span>` : ''}
                         </div>
                     </div>
@@ -671,6 +702,11 @@
                     ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
                     
                     <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
+                    
+                    <div class="bookmark-actions">
+                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
+                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
+                    </div>
                 </div>
             `).join('');
 
@@ -738,6 +774,17 @@
             } catch (e) {
                 return dateString;
             }
+        }
+
+        // Preview and Edit functions
+        function previewBookmark(url, title, bookmarkId) {
+            // Open URL in a new window for preview
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function editBookmark(bookmarkId) {
+            // Redirect to dashboard with edit modal
+            window.location.href = `/?edit=${bookmarkId}`;
         }
         
         // Navigation functions
