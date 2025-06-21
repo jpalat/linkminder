@@ -129,6 +129,228 @@ class BookmarkService {
   }
 
   /**
+   * Get bookmarks by action type
+   * For now, we'll simulate this by filtering triage results
+   * In the future, this could be a dedicated endpoint
+   */
+  async getBookmarksByAction(action: string, limit: number = 50): Promise<Bookmark[]> {
+    try {
+      // For share bookmarks, we need to get from a different source since triage only gets unactioned items
+      // For now, we'll use the triage endpoint and supplement with mock data for non-triage actions
+      if (action === 'read-later' || action === '') {
+        const response = await this.getTriageQueue(limit)
+        return response.bookmarks.map(bookmark => this.transformTriageBookmark(bookmark))
+      } else {
+        // For other actions (share, working, archived), we'll return mock data
+        // until we have proper API endpoints
+        return this.getMockBookmarksByAction(action)
+      }
+    } catch (error) {
+      console.error(`Error fetching ${action} bookmarks:`, error)
+      return this.getMockBookmarksByAction(action)
+    }
+  }
+
+  /**
+   * Get all bookmarks across all action types
+   */
+  async getAllBookmarks(): Promise<Bookmark[]> {
+    try {
+      // Load triage bookmarks (real API)
+      const triageResponse = await this.getTriageQueue(100)
+      const triageBookmarks = triageResponse.bookmarks.map(bookmark => 
+        this.transformTriageBookmark(bookmark)
+      )
+
+      // Supplement with mock data for other action types until API endpoints are available
+      const shareBookmarks = this.getMockBookmarksByAction('share')
+      const workingBookmarks = this.getMockBookmarksByAction('working') 
+      const archivedBookmarks = this.getMockBookmarksByAction('archived')
+
+      return [
+        ...triageBookmarks,
+        ...shareBookmarks,
+        ...workingBookmarks,
+        ...archivedBookmarks
+      ]
+    } catch (error) {
+      console.error('Error fetching all bookmarks:', error)
+      // Fallback to all mock data
+      return this.getAllMockBookmarks()
+    }
+  }
+
+  /**
+   * Transform triage bookmark data to frontend format
+   */
+  private transformTriageBookmark(triageBookmark: any): Bookmark {
+    return {
+      id: String(triageBookmark.id),
+      url: triageBookmark.url,
+      title: triageBookmark.title,
+      description: triageBookmark.description,
+      content: triageBookmark.content,
+      action: triageBookmark.action as any,
+      shareTo: triageBookmark.shareTo,
+      topic: triageBookmark.topic,
+      timestamp: triageBookmark.timestamp,
+      domain: triageBookmark.domain || this.extractDomain(triageBookmark.url),
+      age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp)
+    }
+  }
+
+  /**
+   * Get mock bookmarks filtered by action
+   */
+  private getMockBookmarksByAction(action: string): Bookmark[] {
+    const allMockBookmarks = this.getAllMockBookmarks()
+    return allMockBookmarks.filter(bookmark => bookmark.action === action)
+  }
+
+  /**
+   * Get all mock bookmarks
+   */
+  private getAllMockBookmarks(): Bookmark[] {
+    return [
+      // Triage items (read-later or no action)
+      {
+        id: '1',
+        url: 'https://react.dev/blog/2022/03/29/react-v18',
+        title: 'Building Modern Web Applications with React 18',
+        description: 'Learn about the new features in React 18 including concurrent rendering, automatic batching, and more.',
+        action: 'read-later',
+        timestamp: '2024-01-15T10:30:00Z',
+        domain: 'react.dev',
+        age: '2h'
+      },
+      {
+        id: '2',
+        url: 'https://vuejs.org/guide/essentials/reactivity.html',
+        title: 'Vue.js Reactivity Fundamentals',
+        description: 'Understanding how Vue.js reactivity system works under the hood.',
+        timestamp: '2024-01-15T08:15:00Z',
+        domain: 'vuejs.org',
+        age: '4h'
+      },
+      {
+        id: '3',
+        url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Components',
+        title: 'Web Components MDN Guide',
+        description: 'Complete guide to creating reusable custom elements with Web Components.',
+        action: 'read-later',
+        timestamp: '2024-01-14T20:00:00Z',
+        domain: 'developer.mozilla.org',
+        age: '18h'
+      },
+      
+      // Working items
+      {
+        id: '4',
+        url: 'https://platform.openai.com/docs/guides/gpt',
+        title: 'OpenAI GPT-4 API Documentation',
+        description: 'Complete guide to using the GPT-4 API for building AI-powered applications.',
+        action: 'working',
+        topic: 'ai-tools',
+        timestamp: '2024-01-15T05:30:00Z',
+        domain: 'openai.com',
+        age: '5h'
+      },
+      {
+        id: '5',
+        url: 'https://blog.logrocket.com/svelte-vs-react/',
+        title: 'Svelte vs React: Which Should You Choose?',
+        description: 'A detailed comparison of Svelte and React frameworks for modern web development.',
+        action: 'working',
+        topic: 'framework-research',
+        timestamp: '2024-01-13T12:30:00Z',
+        domain: 'logrocket.com',
+        age: '2d'
+      },
+      {
+        id: '6',
+        url: 'https://react.dev/learn/migration-guide',
+        title: 'React Migration Guide',
+        description: 'Step-by-step guide for migrating from React 17 to React 18.',
+        action: 'working',
+        topic: 'react-migration',
+        timestamp: '2024-01-13T09:00:00Z',
+        domain: 'react.dev',
+        age: '2d'
+      },
+      
+      // Share items
+      {
+        id: '7',
+        url: 'https://css-tricks.com/snippets/css/complete-guide-grid/',
+        title: 'CSS Grid Complete Guide - A comprehensive guide to CSS Grid',
+        description: 'Everything you need to know about CSS Grid layout with practical examples.',
+        action: 'share',
+        shareTo: 'Newsletter',
+        topic: 'css-learning',
+        timestamp: '2024-01-14T15:30:00Z',
+        domain: 'css-tricks.com',
+        age: '1d'
+      },
+      {
+        id: '8',
+        url: 'https://kentcdodds.com/blog/react-performance-tips',
+        title: 'React Performance Tips',
+        description: 'Essential tips for optimizing React application performance.',
+        action: 'share',
+        shareTo: 'Team Slack',
+        topic: 'react-migration',
+        timestamp: '2024-01-14T14:00:00Z',
+        domain: 'kentcdodds.com',
+        age: '1d'
+      },
+      {
+        id: '9',
+        url: 'https://web.dev/accessibility/',
+        title: 'Web Accessibility Guidelines',
+        description: 'Best practices for making web applications accessible to all users.',
+        action: 'share',
+        shareTo: 'Dev Blog',
+        timestamp: '2024-01-14T11:00:00Z',
+        domain: 'web.dev',
+        age: '1d'
+      },
+      
+      // Archived items
+      {
+        id: '10',
+        url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/',
+        title: 'TypeScript 5.0 Release Notes',
+        description: 'Discover the new features and improvements in TypeScript 5.0.',
+        action: 'archived',
+        timestamp: '2024-01-12T09:30:00Z',
+        domain: 'microsoft.com',
+        age: '3d'
+      },
+      {
+        id: '11',
+        url: 'https://nodejs.org/en/blog/announcements/v20-release-announce',
+        title: 'Node.js 20 Release Announcement',
+        description: 'What\'s new in Node.js version 20 with improved performance and features.',
+        action: 'archived',
+        timestamp: '2024-01-11T16:00:00Z',
+        domain: 'nodejs.org',
+        age: '4d'
+      },
+      {
+        id: '12',
+        url: 'https://webpack.js.org/guides/getting-started/',
+        title: 'Webpack Getting Started Guide',
+        description: 'Learn the basics of bundling JavaScript applications with Webpack.',
+        action: 'archived',
+        timestamp: '2024-01-10T13:20:00Z',
+        domain: 'webpack.js.org',
+        age: '5d'
+      }
+    ]
+  }
+
+
+  /**
    * Transform backend bookmark data to frontend Bookmark interface
    * Handles differences between backend and frontend data structures
    */
