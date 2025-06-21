@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Bookmark, FilterState, TabType, DashboardStats, Project } from '@/types'
+import { bookmarkService } from '@/services/bookmarkService'
+import { projectService } from '@/services/projectService'
+import { getErrorMessage, isApiError } from '@/services/api'
+import { getErrorDisplayMessage, isNetworkError } from '@/composables/useApiError'
 
 export const useBookmarkStore = defineStore('bookmarks', () => {
   // State
@@ -12,6 +16,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
   const batchMode = ref(false)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const isConnected = ref(true) // Track API connectivity
   const currentSort = ref('date-desc')
 
   // Computed
@@ -111,7 +116,16 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
 
+  // Store API-fetched dashboard stats
+  const apiDashboardStats = ref<DashboardStats | null>(null)
+  
   const dashboardStats = computed<DashboardStats>(() => {
+    // If we have API stats, use them; otherwise fall back to computed stats
+    if (apiDashboardStats.value) {
+      return apiDashboardStats.value
+    }
+    
+    // Fallback to local computation (for when API is unavailable)
     const needsTriage = bookmarks.value.filter(b => !b.action || b.action === 'read-later').length
     const activeProjects = new Set(bookmarks.value.filter(b => b.action === 'working').map(b => b.topic)).size
     const readyToShare = bookmarks.value.filter(b => b.action === 'share').length
@@ -128,7 +142,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     const projectStats = Array.from(projectCounts.entries()).map(([topic, count]) => ({
       topic,
       count,
-      lastUpdated: new Date().toISOString(), // This would come from API
+      lastUpdated: new Date().toISOString(),
       status: 'active' as const
     }))
 
@@ -195,10 +209,28 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
 
-  const updateBookmark = (bookmarkId: string, updates: Partial<Bookmark>) => {
-    const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
-    if (index !== -1) {
-      bookmarks.value[index] = { ...bookmarks.value[index], ...updates }
+  const updateBookmark = async (bookmarkId: string, updates: Partial<Bookmark>) => {
+    try {
+      // For partial updates, use the PATCH endpoint
+      const backendUpdates = bookmarkService.toBackendUpdateRequest(updates)
+      const updatedBookmark = await bookmarkService.updateBookmark(bookmarkId, backendUpdates)
+      
+      // Update local state
+      const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
+      if (index !== -1) {
+        bookmarks.value[index] = { ...bookmarks.value[index], ...updatedBookmark }
+      }
+      
+      console.log('Successfully updated bookmark:', updatedBookmark)
+    } catch (err) {
+      error.value = getErrorDisplayMessage(err)
+      console.error('Error updating bookmark:', err)
+      
+      if (isNetworkError(err)) {
+        isConnected.value = false
+      }
+      
+      throw err // Re-throw for component error handling
     }
   }
 
@@ -213,13 +245,50 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     loading.value = true
     error.value = null
     try {
-      // This would be an actual API call
-      // For now, we'll load mock data
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API delay
-      bookmarks.value = getMockBookmarks()
+      // Load dashboard stats first to get overall counts
+      const stats = await bookmarkService.getDashboardStats()
+      
+      // Load triage queue (bookmarks needing action)
+      const triageResponse = await bookmarkService.getTriageQueue(100) // Get more items for better filtering
+      
+      // Load project data
+      const projectsResponse = await projectService.getProjects()
+      
+      // Transform and combine data
+      const triageBookmarks = triageResponse.bookmarks.map(bookmark => ({
+        id: String(bookmark.id),
+        url: bookmark.url,
+        title: bookmark.title,
+        description: bookmark.description,
+        content: bookmark.content,
+        action: bookmark.action as any,
+        timestamp: bookmark.timestamp,
+        domain: bookmark.domain || extractDomain(bookmark.url),
+        age: bookmark.age || calculateAge(bookmark.timestamp)
+      }))
+      
+      // For now, we'll use the triage bookmarks as our main dataset
+      // In a full implementation, we'd have a unified bookmarks endpoint
+      bookmarks.value = triageBookmarks
+      
+      // Update projects
+      projects.value = projectsResponse.projects?.map(project => 
+        projectService.transformBackendProject(project)
+      ) || []
+      
     } catch (err) {
-      error.value = 'Failed to load bookmarks'
+      error.value = getErrorDisplayMessage(err)
       console.error('Error loading bookmarks:', err)
+      
+      // Check if it's a network error
+      if (isNetworkError(err)) {
+        isConnected.value = false
+        error.value = 'Unable to connect to server. Using offline mode.'
+      }
+      
+      // Fallback to mock data if API fails
+      console.log('Falling back to mock data')
+      bookmarks.value = getMockBookmarks()
     } finally {
       loading.value = false
     }
@@ -227,23 +296,58 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
 
   const addBookmark = async (bookmark: Omit<Bookmark, 'id' | 'timestamp'>) => {
     try {
-      // This would be an actual API call
-      const newBookmark: Bookmark = {
-        ...bookmark,
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        age: 'just now',
-        domain: extractDomain(bookmark.url)
-      }
+      // Convert to backend format and create via API
+      const backendRequest = bookmarkService.toBackendCreateRequest(bookmark)
+      const newBookmark = await bookmarkService.createBookmark(backendRequest)
+      
+      // Add to local state
       bookmarks.value.unshift(newBookmark)
+      
+      console.log('Successfully added bookmark:', newBookmark)
     } catch (err) {
-      error.value = 'Failed to add bookmark'
+      error.value = getErrorDisplayMessage(err)
       console.error('Error adding bookmark:', err)
+      
+      if (isNetworkError(err)) {
+        isConnected.value = false
+      }
+      
+      throw err // Re-throw for component error handling
     }
   }
   
   const setSortOrder = (sortKey: string) => {
     currentSort.value = sortKey
+  }
+
+  // Load dashboard stats from API
+  const loadDashboardStats = async () => {
+    try {
+      apiDashboardStats.value = await bookmarkService.getDashboardStats()
+    } catch (err) {
+      console.error('Failed to load dashboard stats:', err)
+      // Keep using computed stats as fallback
+    }
+  }
+  
+  // Helper function to calculate age
+  const calculateAge = (timestamp: string): string => {
+    const now = new Date()
+    const created = new Date(timestamp)
+    const diffMs = now.getTime() - created.getTime()
+    
+    const diffMinutes = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const diffWeeks = Math.floor(diffDays / 7)
+    const diffMonths = Math.floor(diffDays / 30)
+    
+    if (diffMinutes < 1) return 'just now'
+    if (diffMinutes < 60) return `${diffMinutes}m`
+    if (diffHours < 24) return `${diffHours}h`
+    if (diffDays < 7) return `${diffDays}d`
+    if (diffWeeks < 4) return `${diffWeeks}w`
+    return `${diffMonths}mo`
   }
 
   return {
@@ -256,6 +360,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     batchMode,
     loading,
     error,
+    isConnected,
     currentSort,
     
     // Computed
@@ -274,7 +379,8 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     moveBookmarks,
     loadBookmarks,
     addBookmark,
-    setSortOrder
+    setSortOrder,
+    loadDashboardStats
   }
 })
 
