@@ -45,6 +45,8 @@ export interface TriageBookmark {
   domain?: string
   age?: string
   action?: string
+  shareTo?: string
+  topic?: string
   tags?: string[]
   customProperties?: Record<string, string>
 }
@@ -138,23 +140,25 @@ class BookmarkService {
 
   /**
    * Get bookmarks by action type
-   * For now, we'll simulate this by filtering triage results
-   * In the future, this could be a dedicated endpoint
+   * GET /api/bookmarks?action={action}
    */
   async getBookmarksByAction(action: string, limit: number = 50): Promise<Bookmark[]> {
     try {
-      // For share bookmarks, we need to get from a different source since triage only gets unactioned items
-      // For now, we'll use the triage endpoint and supplement with mock data for non-triage actions
+      // For triage bookmarks (read-later or empty), use the dedicated triage endpoint
       if (action === 'read-later' || action === '') {
         const response = await this.getTriageQueue(limit)
         return response.bookmarks.map(bookmark => this.transformTriageBookmark(bookmark))
       } else {
-        // For other actions (share, working, archived), we'll return mock data
-        // until we have proper API endpoints
-        return this.getMockBookmarksByAction(action)
+        // For other actions (share, working, archived), use the new bookmarks endpoint
+        const response = await apiClient.get<TriageResponse>('/api/bookmarks', {
+          action,
+          limit
+        })
+        return response.data.bookmarks.map(bookmark => this.transformTriageBookmark(bookmark))
       }
     } catch (error) {
       console.error(`Error fetching ${action} bookmarks:`, error)
+      // Fallback to mock data if API fails
       return this.getMockBookmarksByAction(action)
     }
   }
@@ -164,16 +168,13 @@ class BookmarkService {
    */
   async getAllBookmarks(): Promise<Bookmark[]> {
     try {
-      // Load triage bookmarks (real API)
-      const triageResponse = await this.getTriageQueue(100)
-      const triageBookmarks = triageResponse.bookmarks.map(bookmark => 
-        this.transformTriageBookmark(bookmark)
-      )
-
-      // Supplement with mock data for other action types until API endpoints are available
-      const shareBookmarks = this.getMockBookmarksByAction('share')
-      const workingBookmarks = this.getMockBookmarksByAction('working') 
-      const archivedBookmarks = this.getMockBookmarksByAction('archived')
+      // Load bookmarks from all action types using real API calls
+      const [triageBookmarks, shareBookmarks, workingBookmarks, archivedBookmarks] = await Promise.all([
+        this.getBookmarksByAction('read-later', 100),
+        this.getBookmarksByAction('share', 100),
+        this.getBookmarksByAction('working', 100),
+        this.getBookmarksByAction('archived', 100)
+      ])
 
       return [
         ...triageBookmarks,
