@@ -92,7 +92,7 @@
                 :loading="loading"
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
-                @move-to-working="(id) => moveBookmarks([id], 'working')"
+                @move-to-working="handleMoveToWorking"
                 @move-to-share="(id) => moveBookmarks([id], 'share')"
                 @archive="(id) => moveBookmarks([id], 'archived')"
               />
@@ -195,6 +195,13 @@
       @delete="handleDeleteBookmark"
     />
 
+    <MoveToProjectModal
+      v-model:show="showMoveToProjectModal"
+      :bookmark="selectedBookmark"
+      :existing-topics="existingTopics"
+      @submit="handleMoveToProject"
+    />
+
     <ConfirmModal
       v-model:show="showConfirmModal"
       :config="confirmConfig"
@@ -220,6 +227,7 @@ import ProjectList from '@/components/project/ProjectList.vue'
 import ShareGroups from '@/components/share/ShareGroups.vue'
 import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
+import MoveToProjectModal from '@/components/modals/MoveToProjectModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
 import type { Bookmark } from '@/types'
 import { ServerStatus } from '@/utils/serverStatus'
@@ -258,6 +266,7 @@ const showFilters = ref(false)
 const showSort = ref(false)
 const showAddModal = ref(false)
 const showEditModal = ref(false)
+const showMoveToProjectModal = ref(false)
 const showConfirmModal = ref(false)
 const selectedBookmark = ref<Bookmark | null>(null)
 const confirmConfig = ref<ConfirmationConfig>({ type: 'custom' })
@@ -334,6 +343,24 @@ const handleEdit = (bookmarkId: string) => {
   if (bookmark) {
     selectedBookmark.value = bookmark
     showEditModal.value = true
+  }
+}
+
+const handleMoveToWorking = (bookmarkId: string) => {
+  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    selectedBookmark.value = bookmark
+    showMoveToProjectModal.value = true
+  }
+}
+
+const handleMoveToProject = async (bookmarkId: string, topic: string) => {
+  try {
+    await updateBookmark(bookmarkId, { action: 'working', topic })
+    showMoveToProjectModal.value = false
+    selectedBookmark.value = null
+  } catch (error) {
+    console.error('Failed to move bookmark to project:', error)
   }
 }
 
