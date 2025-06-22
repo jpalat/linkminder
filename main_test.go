@@ -71,6 +71,484 @@ func setupTestDB(t *testing.T) *TestDB {
 	return &TestDB{db: db, dbPath: dbPath}
 }
 
+// Project Settings API Tests
+
+func TestProjectSettings_CreateProject(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	tests := []struct {
+		name           string
+		projectData    map[string]interface{}
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name: "valid new project",
+			projectData: map[string]interface{}{
+				"name":        "Test Project",
+				"description": "A test project for unit testing",
+				"status":      "active",
+			},
+			expectedStatus: http.StatusCreated,
+			expectError:    false,
+		},
+		{
+			name: "project with minimal data",
+			projectData: map[string]interface{}{
+				"name": "Minimal Project",
+			},
+			expectedStatus: http.StatusCreated,
+			expectError:    false,
+		},
+		{
+			name: "duplicate project name",
+			projectData: map[string]interface{}{
+				"name":        "Test Project", // Same as first test
+				"description": "This should fail",
+			},
+			expectedStatus: http.StatusConflict,
+			expectError:    true,
+		},
+		{
+			name: "missing required name",
+			projectData: map[string]interface{}{
+				"description": "Project without name",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name: "empty name",
+			projectData: map[string]interface{}{
+				"name":        "",
+				"description": "Project with empty name",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.projectData)
+			req, err := http.NewRequest("POST", "/api/projects", bytes.NewBuffer(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", 
+					tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+			
+			if !tt.expectError && rr.Code == http.StatusCreated {
+				var response map[string]interface{}
+				if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+					t.Errorf("Failed to parse response: %v", err)
+				}
+				
+				// Verify response contains expected fields
+				if _, ok := response["id"]; !ok {
+					t.Error("Response should contain 'id' field")
+				}
+				if response["name"] != tt.projectData["name"] {
+					t.Errorf("Expected name '%v', got '%v'", tt.projectData["name"], response["name"])
+				}
+			}
+		})
+	}
+}
+
+func TestProjectSettings_UpdateProject(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	// Create a test project first
+	createData := map[string]interface{}{
+		"name":        "Original Project",
+		"description": "Original description",
+		"status":      "active",
+	}
+	
+	body, _ := json.Marshal(createData)
+	req, _ := http.NewRequest("POST", "/api/projects", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handleProjects)
+	handler.ServeHTTP(rr, req)
+	
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Failed to create test project: %d", rr.Code)
+	}
+	
+	var createdProject map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &createdProject)
+	projectID := int(createdProject["id"].(float64))
+	
+	tests := []struct {
+		name           string
+		projectID      int
+		updateData     map[string]interface{}
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:      "valid update all fields",
+			projectID: projectID,
+			updateData: map[string]interface{}{
+				"name":        "Updated Project",
+				"description": "Updated description",
+				"status":      "archived",
+			},
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:      "update only description",
+			projectID: projectID,
+			updateData: map[string]interface{}{
+				"description": "Only description updated",
+			},
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:      "update only status",
+			projectID: projectID,
+			updateData: map[string]interface{}{
+				"status": "inactive",
+			},
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:      "nonexistent project",
+			projectID: 99999,
+			updateData: map[string]interface{}{
+				"name": "This should fail",
+			},
+			expectedStatus: http.StatusNotFound,
+			expectError:    true,
+		},
+		{
+			name:      "empty name",
+			projectID: projectID,
+			updateData: map[string]interface{}{
+				"name": "",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.updateData)
+			url := fmt.Sprintf("/api/projects/%d", tt.projectID)
+			req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", 
+					tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+			
+			if !tt.expectError && rr.Code == http.StatusOK {
+				var response map[string]interface{}
+				if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+					t.Errorf("Failed to parse response: %v", err)
+				}
+				
+				// Verify updated fields
+				for key, expectedValue := range tt.updateData {
+					if response[key] != expectedValue {
+						t.Errorf("Expected %s '%v', got '%v'", key, expectedValue, response[key])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestProjectSettings_DeleteProject(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	// Create test projects
+	projects := []map[string]interface{}{
+		{"name": "Project to Delete", "description": "Will be deleted"},
+		{"name": "Project with Bookmarks", "description": "Has associated bookmarks"},
+	}
+	
+	var projectIDs []int
+	for _, project := range projects {
+		body, _ := json.Marshal(project)
+		req, _ := http.NewRequest("POST", "/api/projects", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(handleProjects)
+		handler.ServeHTTP(rr, req)
+		
+		var createdProject map[string]interface{}
+		json.Unmarshal(rr.Body.Bytes(), &createdProject)
+		projectIDs = append(projectIDs, int(createdProject["id"].(float64)))
+	}
+	
+	// Add a bookmark to the second project
+	_, err := testDB.db.Exec(`
+		INSERT INTO bookmarks (url, title, action, topic, project_id, timestamp)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, "https://example.com", "Test Bookmark", "working", "Project with Bookmarks", projectIDs[1], time.Now())
+	if err != nil {
+		t.Fatalf("Failed to create test bookmark: %v", err)
+	}
+	
+	tests := []struct {
+		name           string
+		projectID      int
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "delete empty project",
+			projectID:      projectIDs[0],
+			expectedStatus: http.StatusNoContent,
+			expectError:    false,
+		},
+		{
+			name:           "delete project with bookmarks (should cascade)",
+			projectID:      projectIDs[1],
+			expectedStatus: http.StatusNoContent,
+			expectError:    false,
+		},
+		{
+			name:           "delete nonexistent project",
+			projectID:      99999,
+			expectedStatus: http.StatusNotFound,
+			expectError:    true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := fmt.Sprintf("/api/projects/%d", tt.projectID)
+			req, err := http.NewRequest("DELETE", url, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", 
+					tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+			
+			// Verify project was actually deleted
+			if !tt.expectError && rr.Code == http.StatusNoContent {
+				var count int
+				err := testDB.db.QueryRow("SELECT COUNT(*) FROM projects WHERE id = ?", tt.projectID).Scan(&count)
+				if err != nil {
+					t.Errorf("Failed to check if project was deleted: %v", err)
+				}
+				if count != 0 {
+					t.Error("Project should have been deleted")
+				}
+			}
+		})
+	}
+}
+
+func TestProjectSettings_GetProject(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	// Create a test project
+	createData := map[string]interface{}{
+		"name":        "Get Test Project",
+		"description": "Project for GET testing",
+		"status":      "active",
+	}
+	
+	body, _ := json.Marshal(createData)
+	req, _ := http.NewRequest("POST", "/api/projects", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handleProjects)
+	handler.ServeHTTP(rr, req)
+	
+	var createdProject map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &createdProject)
+	projectID := int(createdProject["id"].(float64))
+	
+	tests := []struct {
+		name           string
+		projectID      int
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "get existing project",
+			projectID:      projectID,
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:           "get nonexistent project",
+			projectID:      99999,
+			expectedStatus: http.StatusNotFound,
+			expectError:    true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := fmt.Sprintf("/api/projects/%d", tt.projectID)
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", 
+					tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+			
+			if !tt.expectError && rr.Code == http.StatusOK {
+				var response map[string]interface{}
+				if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+					t.Errorf("Failed to parse response: %v", err)
+				}
+				
+				// Verify response contains expected fields
+				expectedFields := []string{"id", "name", "description", "status", "createdAt", "updatedAt"}
+				for _, field := range expectedFields {
+					if _, ok := response[field]; !ok {
+						t.Errorf("Response should contain '%s' field", field)
+					}
+				}
+				
+				if response["name"] != createData["name"] {
+					t.Errorf("Expected name '%v', got '%v'", createData["name"], response["name"])
+				}
+			}
+		})
+	}
+}
+
+func TestProjectSettings_InvalidMethods(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	invalidMethods := []string{"PATCH", "OPTIONS", "HEAD"}
+	
+	for _, method := range invalidMethods {
+		t.Run(fmt.Sprintf("invalid method %s", method), func(t *testing.T) {
+			req, err := http.NewRequest(method, "/api/projects", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Expected status %d for method %s, got %d", 
+					http.StatusMethodNotAllowed, method, rr.Code)
+			}
+		})
+	}
+}
+
+func TestProjectSettings_MalformedJSON(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer testDB.db.Close()
+	
+	// Set the global db variable for testing
+	db = testDB.db
+	
+	tests := []struct {
+		name        string
+		method      string
+		body        string
+		expectedStatus int
+	}{
+		{
+			name:   "invalid JSON in POST",
+			method: "POST",
+			body:   `{"name": "test", "invalid": }`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "invalid JSON in PUT",
+			method: "PUT",
+			body:   `{"name": "test", "description":}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := "/api/projects"
+			if tt.method == "PUT" {
+				url = "/api/projects/1"
+			}
+			
+			req, err := http.NewRequest(tt.method, url, strings.NewReader(tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			
+			rr := httptest.NewRecorder()
+			handler := http.HandlerFunc(handleProjects)
+			handler.ServeHTTP(rr, req)
+			
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, rr.Code)
+			}
+		})
+	}
+}
+
 // cleanup closes the test database and removes the file
 func (tdb *TestDB) cleanup(t *testing.T) {
 	if err := tdb.db.Close(); err != nil {
