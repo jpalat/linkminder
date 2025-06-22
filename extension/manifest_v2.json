@@ -1,5 +1,5 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 2,
   "name": "BookMinder",
   "version": "1.0",
   "description": "Save bookmarks with page content to BookMinder API",
@@ -7,16 +7,9 @@
     "activeTab",
     "storage",
     "tabs",
-    "scripting"
-  ],
-  "host_permissions": [
     "<all_urls>"
   ],
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": false
-  },
-  "action": {
+  "browser_action": {
     "default_popup": "popup.html",
     "default_title": "Save Bookmark"
   },
@@ -27,11 +20,16 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"],
+    "persistent": false
   },
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   }
 }

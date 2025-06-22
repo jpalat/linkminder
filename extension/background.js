@@ -1,8 +1,17 @@
-const API_BASE_URL = 'http://192.168.1.112:9090';
+async function getApiBaseUrl() {
+  try {
+    const result = await chrome.storage.sync.get(['apiUrl']);
+    return result.apiUrl || 'http://localhost:9090';
+  } catch (error) {
+    console.error('Error getting API URL from storage:', error);
+    return 'http://localhost:9090';
+  }
+}
 
 async function saveBookmark(bookmarkData) {
   try {
-    const response = await fetch(`${API_BASE_URL}/bookmark`, {
+    const apiBaseUrl = await getApiBaseUrl();
+    const response = await fetch(`${apiBaseUrl}/bookmark`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -24,7 +33,8 @@ async function saveBookmark(bookmarkData) {
 
 async function getTopics() {
   try {
-    const response = await fetch(`${API_BASE_URL}/topics`, {
+    const apiBaseUrl = await getApiBaseUrl();
+    const response = await fetch(`${apiBaseUrl}/topics`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
