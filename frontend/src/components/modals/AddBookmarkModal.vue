@@ -116,18 +116,41 @@
 
       <!-- Share Destination (conditional) -->
       <div v-if="formData.action === 'share'" class="form-group">
-        <label for="shareTo" class="form-label">Share Destination</label>
-        <select
+        <label for="shareTo" class="form-label">Share Destination *</label>
+        <AppInput
           id="shareTo"
           v-model="formData.shareTo"
-          class="form-select"
-        >
-          <option value="">Select destination</option>
-          <option value="Team Slack">📢 Team Slack</option>
-          <option value="Newsletter">📧 Newsletter</option>
-          <option value="Dev Blog">📝 Dev Blog</option>
-          <option value="Unassigned">📤 Unassigned</option>
-        </select>
+          placeholder="Enter recipient or select from previous destinations"
+          :error="errors.shareTo"
+          list="share-destinations-add"
+          @input="clearError('shareTo')"
+        />
+        <datalist id="share-destinations-add">
+          <option v-for="destination in availableShareDestinations" :key="destination" :value="destination" />
+          <!-- Common destination suggestions -->
+          <option value="Team Slack" />
+          <option value="Newsletter" />
+          <option value="Dev Blog" />
+          <option value="Social Media" />
+          <option value="Email" />
+          <option value="Unassigned" />
+        </datalist>
+        
+        <!-- Quick Selection Chips -->
+        <div v-if="availableShareDestinations.length > 0" class="destination-chips">
+          <div class="chips-label">Previous destinations:</div>
+          <div class="chips-container">
+            <button
+              v-for="destination in availableShareDestinations.slice(0, 5)"
+              :key="destination"
+              type="button"
+              class="destination-chip"
+              @click="selectShareDestination(destination)"
+            >
+              {{ destination }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Content Preview (if available) -->
@@ -161,6 +184,8 @@ import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import { useNotifications } from '@/composables/useNotifications'
+import { storeToRefs } from 'pinia'
+import { useBookmarkStore } from '@/stores/bookmarks'
 
 interface Props {
   show: boolean
@@ -190,6 +215,10 @@ const emit = defineEmits<{
 }>()
 
 const { validationError } = useNotifications()
+
+// Store access
+const bookmarkStore = useBookmarkStore()
+const { availableShareDestinations } = storeToRefs(bookmarkStore)
 
 // Form state
 const formData = ref<FormData>({
@@ -274,6 +303,10 @@ const validateForm = (): boolean => {
     newErrors.topic = 'Project/Topic is required for working items'
   }
   
+  if (formData.value.action === 'share' && !formData.value.shareTo) {
+    newErrors.shareTo = 'Share destination is required'
+  }
+  
   errors.value = newErrors
   return Object.keys(newErrors).length === 0
 }
@@ -327,6 +360,11 @@ const handleActionChange = () => {
 const selectTopic = (topic: string) => {
   formData.value.topic = topic
   clearError('topic')
+}
+
+const selectShareDestination = (destination: string) => {
+  formData.value.shareTo = destination
+  clearError('shareTo')
 }
 
 const handleSubmit = async () => {
@@ -556,6 +594,43 @@ watch(() => formData.value.url, (newUrl) => {
 }
 
 .topic-chip:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Share Destination Chips */
+.destination-chips {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.chips-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-600);
+  margin-bottom: var(--spacing-sm);
+}
+
+.chips-container {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.destination-chip {
+  background: var(--color-gray-100);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.destination-chip:hover {
   background: var(--color-primary);
   color: white;
   border-color: var(--color-primary);
