@@ -204,6 +204,16 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     return Array.from(domains).sort()
   })
 
+  const availableShareDestinations = computed(() => {
+    const destinations = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.shareTo && b.shareTo.trim() !== '') {
+        destinations.add(b.shareTo)
+      }
+    })
+    return Array.from(destinations).sort()
+  })
+
   // Actions
   const updateFilters = (newFilters: Partial<FilterState>) => {
     filters.value = { ...filters.value, ...newFilters }
@@ -438,6 +448,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     shareGroups,
     availableTopics,
     availableDomains,
+    availableShareDestinations,
     
     // Actions
     updateFilters,
