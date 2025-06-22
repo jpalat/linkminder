@@ -256,8 +256,7 @@
               :key="bookmark.id"
               class="bookmark-item"
               :class="{ 
-                'bookmark-selected': selectedBookmarks.has(bookmark.id),
-                'bookmark-preview': previewBookmark?.id === bookmark.id 
+                'bookmark-selected': selectedBookmarks.has(bookmark.id)
               }"
             >
               <!-- Selection Checkbox -->
@@ -271,7 +270,7 @@
               </div>
               
               <!-- Bookmark Content -->
-              <div class="bookmark-content" @click="openPreview(bookmark)">
+              <div class="bookmark-content">
                 <div class="bookmark-header">
                   <h3 class="bookmark-title">{{ bookmark.title }}</h3>
                   <div class="bookmark-actions">
@@ -344,14 +343,6 @@
       :existing-topics="[projectData?.topic || ''].filter(Boolean)"
     />
     
-    <PreviewModal 
-      v-if="previewBookmark"
-      :show="!!previewBookmark"
-      :bookmark="previewBookmark"
-      @close="previewBookmark = null"
-      @edit="(bookmarkId) => editFromPreview(previewBookmark!)"
-      @delete="() => deleteFromPreview(previewBookmark!)"
-    />
     
     <ProjectSettingsModal
       v-if="showSettingsModal && projectData"
@@ -391,7 +382,6 @@ import AppBadge from '@/components/ui/AppBadge.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
-import PreviewModal from '@/components/modals/PreviewModal.vue'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import ProjectSettingsModal from '@/components/modals/ProjectSettingsModal.vue'
 
@@ -408,7 +398,6 @@ const error = ref<string | null>(null)
 const showAddBookmarkModal = ref(false)
 const showSettingsModal = ref(false)
 const editingBookmark = ref<Bookmark | null>(null)
-const previewBookmark = ref<Bookmark | null>(null)
 const confirmAction = ref<{
   title: string
   message: string
@@ -568,16 +557,7 @@ const toggleBookmarkSelection = (bookmarkId: string) => {
 }
 
 // Modal handlers
-const openPreview = (bookmark: Bookmark) => {
-  previewBookmark.value = bookmark
-}
-
 const editBookmark = (bookmark: Bookmark) => {
-  editingBookmark.value = bookmark
-}
-
-const editFromPreview = (bookmark: Bookmark) => {
-  previewBookmark.value = null
   editingBookmark.value = bookmark
 }
 
@@ -589,11 +569,6 @@ const deleteBookmark = (bookmark: Bookmark) => {
     variant: 'danger',
     action: () => performDeleteBookmark(bookmark.id)
   }
-}
-
-const deleteFromPreview = (bookmark: Bookmark) => {
-  previewBookmark.value = null
-  deleteBookmark(bookmark)
 }
 
 const bulkAction = async (action: string) => {

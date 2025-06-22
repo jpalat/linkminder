@@ -56,13 +56,6 @@
     <div class="bookmark-actions">
       <AppButton
         size="xs"
-        variant="info"
-        @click.stop="$emit('preview', bookmark.id)"
-      >
-        👁️
-      </AppButton>
-      <AppButton
-        size="xs"
         variant="secondary"
         @click.stop="$emit('edit', bookmark.id)"
       >
@@ -115,7 +108,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'toggle-selection': [id: string]
-  'preview': [id: string]
   'edit': [id: string]
   'move-to-working': [id: string]
   'move-to-share': [id: string]

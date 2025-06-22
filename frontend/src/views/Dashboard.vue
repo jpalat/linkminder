@@ -91,7 +91,6 @@
                 :show-results-count="hasActiveFilters"
                 :loading="loading"
                 @toggle-selection="toggleSelection"
-                @preview="handlePreview"
                 @edit="handleEdit"
                 @move-to-working="(id) => moveBookmarks([id], 'working')"
                 @move-to-share="(id) => moveBookmarks([id], 'share')"
@@ -146,7 +145,6 @@
                 :bookmarks="filteredBookmarks"
                 :batch-mode="batchMode"
                 @toggle-selection="toggleSelection"
-                @preview="handlePreview"
                 @edit="handleEdit"
               />
             </div>
@@ -188,14 +186,6 @@
       @submit="handleAddBookmark"
     />
 
-    <PreviewModal
-      v-model:show="showPreviewModal"
-      :bookmark="selectedBookmark"
-      @edit="handleEdit"
-      @move-to-share="(id) => moveBookmarks([id], 'share')"
-      @move-to-working="(id) => moveBookmarks([id], 'working')"
-      @archive="(id) => moveBookmarks([id], 'archived')"
-    />
 
     <EditBookmarkModal
       v-model:show="showEditModal"
@@ -229,7 +219,6 @@ import SortPanel from '@/components/ui/SortPanel.vue'
 import ProjectList from '@/components/project/ProjectList.vue'
 import ShareGroups from '@/components/share/ShareGroups.vue'
 import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
-import PreviewModal from '@/components/modals/PreviewModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
 import type { Bookmark } from '@/types'
@@ -268,7 +257,6 @@ const searchQuery = ref('')
 const showFilters = ref(false)
 const showSort = ref(false)
 const showAddModal = ref(false)
-const showPreviewModal = ref(false)
 const showEditModal = ref(false)
 const showConfirmModal = ref(false)
 const selectedBookmark = ref<Bookmark | null>(null)
@@ -339,14 +327,6 @@ const totalBookmarksForCurrentTab = computed(() => {
 // Methods
 const handleSearch = (query: string) => {
   updateFilters({ search: query })
-}
-
-const handlePreview = (bookmarkId: string) => {
-  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
-  if (bookmark) {
-    selectedBookmark.value = bookmark
-    showPreviewModal.value = true
-  }
 }
 
 const handleEdit = (bookmarkId: string) => {
