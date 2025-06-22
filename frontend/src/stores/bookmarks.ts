@@ -71,21 +71,25 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
 
     // Apply age filter
     if (filters.value.age) {
-      // Implementation would depend on your age parsing logic
-      // This is a simplified version
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+      
       filtered = filtered.filter(b => {
-        if (!b.age) return false
+        const bookmarkDate = new Date(b.timestamp)
         switch (filters.value.age) {
           case 'today':
-            return b.age.includes('h')
+            return bookmarkDate >= today
           case 'yesterday':
-            return b.age === '1d'
+            return bookmarkDate >= yesterday && bookmarkDate < today
           case 'week':
-            return b.age.includes('h') || b.age.includes('d')
+            return bookmarkDate >= weekAgo
           case 'month':
-            return !b.age.includes('w') && !b.age.includes('m')
+            return bookmarkDate >= monthAgo
           case 'older':
-            return b.age.includes('w') || b.age.includes('m')
+            return bookmarkDate < monthAgo
           default:
             return true
         }
@@ -178,6 +182,26 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       icon: getDestinationIcon(destination),
       color: getDestinationColor(destination)
     }))
+  })
+
+  const availableTopics = computed(() => {
+    const topics = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.topic) {
+        topics.add(b.topic)
+      }
+    })
+    return Array.from(topics).sort()
+  })
+
+  const availableDomains = computed(() => {
+    const domains = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.domain) {
+        domains.add(b.domain)
+      }
+    })
+    return Array.from(domains).sort()
   })
 
   // Actions
@@ -412,6 +436,8 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     filteredBookmarks,
     dashboardStats,
     shareGroups,
+    availableTopics,
+    availableDomains,
     
     // Actions
     updateFilters,
