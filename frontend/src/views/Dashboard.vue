@@ -774,7 +774,9 @@ onMounted(async () => {
   }
   
   .main-content {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   
   .search-container {
@@ -788,6 +790,12 @@ onMounted(async () => {
   .tab-button {
     font-size: var(--font-size-xs);
     padding: var(--spacing-xs) var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: var(--spacing-sm);
   }
 }
 </style>
