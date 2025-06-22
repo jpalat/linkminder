@@ -160,6 +160,7 @@ import { ref, computed, watch } from 'vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
+import { useNotifications } from '@/composables/useNotifications'
 
 interface Props {
   show: boolean
@@ -187,6 +188,8 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
   'submit': [data: FormData]
 }>()
+
+const { validationError } = useNotifications()
 
 // Form state
 const formData = ref<FormData>({
@@ -346,6 +349,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Failed to submit bookmark:', error)
     errors.value.submit = 'Failed to add bookmark. Please try again.'
+    validationError('Please check your bookmark details and try again.')
   } finally {
     isSubmitting.value = false
   }
