@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -26,6 +27,19 @@ type Project struct {
 	LinkCount   int    `json:"linkCount"`
 	LastUpdated string `json:"lastUpdated"`
 	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
+}
+
+type ProjectCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+}
+
+type ProjectUpdateRequest struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 type BookmarkRequest struct {
@@ -316,6 +330,10 @@ func main() {
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
 	log.Printf("  GET /api/bookmarks?action={action} - Get bookmarks by action type")
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
+	log.Printf("  POST /api/projects - Create a new project")
+	log.Printf("  GET /api/projects/{id} - Get project by ID")
+	log.Printf("  PUT /api/projects/{id} - Update project settings")
+	log.Printf("  DELETE /api/projects/{id} - Delete a project")
 	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
 	log.Printf("  GET /api/projects/id/{id} - Get detailed view of a project by ID")
 	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark (partial)")
@@ -1253,15 +1271,29 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 		"remote_addr": r.RemoteAddr,
 	})
 	
-	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
-		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method":   r.Method,
-			"expected": "GET",
-		})
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// Route to handleProjectSettings for individual project operations (path includes ID)
+	pathWithoutPrefix := strings.TrimPrefix(r.URL.Path, "/api/projects")
+	if pathWithoutPrefix != "" && pathWithoutPrefix != "/" {
+		handleProjectSettings(w, r)
 		return
 	}
+	
+	switch r.Method {
+	case http.MethodGet:
+		handleGetProjects(w, r)
+	case http.MethodPost:
+		handleCreateProject(w, r)
+	default:
+		log.Printf("Method not allowed: %s", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method": r.Method,
+			"allowed": []string{"GET", "POST"},
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleGetProjects(w http.ResponseWriter, r *http.Request) {
 
 	projects, err := getProjects()
 	if err != nil {
@@ -1281,6 +1313,421 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(projects)
+}
+
+func handleCreateProject(w http.ResponseWriter, r *http.Request) {
+	var req ProjectCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode project creation request: %v", err)
+		logStructured("ERROR", "api", "Invalid JSON in project creation", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	// Validate required fields
+	if strings.TrimSpace(req.Name) == "" {
+		log.Printf("Project name is required")
+		logStructured("WARN", "api", "Project name missing", nil)
+		http.Error(w, "Project name is required", http.StatusBadRequest)
+		return
+	}
+	
+	// Set default status if not provided
+	if req.Status == "" {
+		req.Status = "active"
+	}
+	
+	// Create the project
+	project, err := createProject(req)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			log.Printf("Project name already exists: %s", req.Name)
+			logStructured("WARN", "database", "Duplicate project name", map[string]interface{}{
+				"name": req.Name,
+			})
+			http.Error(w, "Project name already exists", http.StatusConflict)
+			return
+		}
+		
+		log.Printf("Failed to create project: %v", err)
+		logStructured("ERROR", "database", "Failed to create project", map[string]interface{}{
+			"error": err.Error(),
+			"name":  req.Name,
+		})
+		http.Error(w, "Failed to create project", http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Successfully created project: %s (ID: %d)", project.Name, project.ID)
+	logStructured("INFO", "database", "Project created", map[string]interface{}{
+		"id":   project.ID,
+		"name": project.Name,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(project)
+}
+
+func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to project settings from %s", r.Method, r.RemoteAddr)
+	
+	// Extract project ID from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
+	if path == "" || path == "/" {
+		http.Error(w, "Project ID required", http.StatusBadRequest)
+		return
+	}
+	
+	// Handle the existing topic-based routing
+	if !isNumeric(path) {
+		// This is probably a topic-based request, route to existing handler
+		if r.Method == http.MethodGet {
+			handleProjectDetail(w, r)
+			return
+		}
+		http.Error(w, "Only GET method supported for topic-based projects", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	projectID, err := strconv.Atoi(path)
+	if err != nil {
+		log.Printf("Invalid project ID: %s", path)
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	
+	switch r.Method {
+	case http.MethodGet:
+		handleGetProject(w, r, projectID)
+	case http.MethodPut:
+		handleUpdateProject(w, r, projectID)
+	case http.MethodDelete:
+		handleDeleteProject(w, r, projectID)
+	default:
+		log.Printf("Method not allowed: %s", r.Method)
+		logStructured("WARN", "api", "Method not allowed for project settings", map[string]interface{}{
+			"method": r.Method,
+			"allowed": []string{"GET", "PUT", "DELETE"},
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleGetProject(w http.ResponseWriter, r *http.Request, projectID int) {
+	project, err := getProjectByID(projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Project not found: %d", projectID)
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		
+		log.Printf("Failed to get project %d: %v", projectID, err)
+		logStructured("ERROR", "database", "Failed to get project", map[string]interface{}{
+			"error":     err.Error(),
+			"projectId": projectID,
+		})
+		http.Error(w, "Failed to get project", http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Successfully retrieved project: %d", projectID)
+	logStructured("INFO", "database", "Project retrieved", map[string]interface{}{
+		"projectId": projectID,
+		"name":      project.Name,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(project)
+}
+
+func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) {
+	// Read the request body once and parse it for both struct and raw data
+	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	
+	var req ProjectUpdateRequest
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		log.Printf("Failed to decode project update request: %v", err)
+		logStructured("ERROR", "api", "Invalid JSON in project update", map[string]interface{}{
+			"error":     err.Error(),
+			"projectId": projectID,
+		})
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	// Parse raw JSON to check if name field was explicitly provided
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	// If name field is explicitly provided, validate it's not empty
+	if nameValue, nameExists := rawData["name"]; nameExists {
+		if nameStr, ok := nameValue.(string); ok && strings.TrimSpace(nameStr) == "" {
+			log.Printf("Project name cannot be empty")
+			logStructured("WARN", "api", "Empty project name in update", map[string]interface{}{
+				"projectId": projectID,
+				"name":      nameStr,
+			})
+			http.Error(w, "Project name cannot be empty", http.StatusBadRequest)
+			return
+		}
+	}
+	
+	// Update the project
+	project, err := updateProject(projectID, req)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Project not found for update: %d", projectID)
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			log.Printf("Project name already exists: %s", req.Name)
+			logStructured("WARN", "database", "Duplicate project name in update", map[string]interface{}{
+				"name":      req.Name,
+				"projectId": projectID,
+			})
+			http.Error(w, "Project name already exists", http.StatusConflict)
+			return
+		}
+		
+		log.Printf("Failed to update project %d: %v", projectID, err)
+		logStructured("ERROR", "database", "Failed to update project", map[string]interface{}{
+			"error":     err.Error(),
+			"projectId": projectID,
+		})
+		http.Error(w, "Failed to update project", http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Successfully updated project: %d", projectID)
+	logStructured("INFO", "database", "Project updated", map[string]interface{}{
+		"projectId": projectID,
+		"name":      project.Name,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(project)
+}
+
+func handleDeleteProject(w http.ResponseWriter, r *http.Request, projectID int) {
+	// Check if project exists first
+	_, err := getProjectByID(projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Project not found for deletion: %d", projectID)
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		
+		log.Printf("Failed to check project existence %d: %v", projectID, err)
+		logStructured("ERROR", "database", "Failed to check project for deletion", map[string]interface{}{
+			"error":     err.Error(),
+			"projectId": projectID,
+		})
+		http.Error(w, "Failed to check project", http.StatusInternalServerError)
+		return
+	}
+	
+	// Delete the project (this should cascade to bookmarks)
+	err = deleteProject(projectID)
+	if err != nil {
+		log.Printf("Failed to delete project %d: %v", projectID, err)
+		logStructured("ERROR", "database", "Failed to delete project", map[string]interface{}{
+			"error":     err.Error(),
+			"projectId": projectID,
+		})
+		http.Error(w, "Failed to delete project", http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Successfully deleted project: %d", projectID)
+	logStructured("INFO", "database", "Project deleted", map[string]interface{}{
+		"projectId": projectID,
+	})
+	
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Database functions for project settings
+
+func createProject(req ProjectCreateRequest) (*Project, error) {
+	logStructured("INFO", "database", "Creating project", map[string]interface{}{
+		"name": req.Name,
+	})
+	
+	now := time.Now()
+	
+	result, err := db.Exec(`
+		INSERT INTO projects (name, description, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, req.Name, req.Description, req.Status, now, now)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	
+	project := &Project{
+		ID:          int(id),
+		Name:        req.Name,
+		Description: req.Description,
+		Status:      req.Status,
+		LinkCount:   0,
+		CreatedAt:   now.Format(time.RFC3339),
+		UpdatedAt:   now.Format(time.RFC3339),
+	}
+	
+	return project, nil
+}
+
+func getProjectByID(projectID int) (*Project, error) {
+	logStructured("INFO", "database", "Getting project by ID", map[string]interface{}{
+		"projectId": projectID,
+	})
+	
+	var project Project
+	var createdAt, updatedAt time.Time
+	
+	err := db.QueryRow(`
+		SELECT p.id, p.name, p.description, p.status, p.created_at, p.updated_at,
+		       COUNT(b.id) as link_count
+		FROM projects p
+		LEFT JOIN bookmarks b ON (p.name = b.topic OR p.id = b.project_id) AND b.action = 'working'
+		WHERE p.id = ?
+		GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.updated_at
+	`, projectID).Scan(
+		&project.ID,
+		&project.Name,
+		&project.Description,
+		&project.Status,
+		&createdAt,
+		&updatedAt,
+		&project.LinkCount,
+	)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	project.CreatedAt = createdAt.Format(time.RFC3339)
+	project.UpdatedAt = updatedAt.Format(time.RFC3339)
+	project.LastUpdated = updatedAt.Format(time.RFC3339)
+	
+	return &project, nil
+}
+
+func updateProject(projectID int, req ProjectUpdateRequest) (*Project, error) {
+	logStructured("INFO", "database", "Updating project", map[string]interface{}{
+		"projectId": projectID,
+	})
+	
+	// Build dynamic query based on provided fields
+	var setParts []string
+	var args []interface{}
+	
+	if req.Name != "" {
+		setParts = append(setParts, "name = ?")
+		args = append(args, req.Name)
+	}
+	
+	if req.Description != "" {
+		setParts = append(setParts, "description = ?")
+		args = append(args, req.Description)
+	}
+	
+	if req.Status != "" {
+		setParts = append(setParts, "status = ?")
+		args = append(args, req.Status)
+	}
+	
+	if len(setParts) == 0 {
+		// No fields to update, just return current project
+		return getProjectByID(projectID)
+	}
+	
+	// Always update the updated_at timestamp
+	setParts = append(setParts, "updated_at = ?")
+	args = append(args, time.Now())
+	
+	// Add projectID to args for WHERE clause
+	args = append(args, projectID)
+	
+	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = ?", strings.Join(setParts, ", "))
+	
+	result, err := db.Exec(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	
+	if rowsAffected == 0 {
+		return nil, sql.ErrNoRows
+	}
+	
+	// Return updated project
+	return getProjectByID(projectID)
+}
+
+func deleteProject(projectID int) error {
+	logStructured("INFO", "database", "Deleting project", map[string]interface{}{
+		"projectId": projectID,
+	})
+	
+	// First, update any bookmarks that reference this project to remove the reference
+	// We'll set project_id to NULL and keep the topic for backward compatibility
+	_, err := db.Exec(`
+		UPDATE bookmarks 
+		SET project_id = NULL 
+		WHERE project_id = ?
+	`, projectID)
+	
+	if err != nil {
+		return fmt.Errorf("failed to update bookmarks: %v", err)
+	}
+	
+	// Now delete the project
+	result, err := db.Exec("DELETE FROM projects WHERE id = ?", projectID)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
+
+// Helper function to check if a string is numeric
+func isNumeric(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
 }
 
 func getProjects() (*ProjectsResponse, error) {
