@@ -22,10 +22,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 3000);
   }
   
+  // Function to show settings reminder
+  function showSettingsReminder() {
+    const settingsDiv = document.createElement('div');
+    settingsDiv.className = 'status error';
+    settingsDiv.innerHTML = 'API URL not configured. <a href="#" id="openSettings">Open Settings</a>';
+    settingsDiv.style.display = 'block';
+    statusDiv.parentNode.insertBefore(settingsDiv, statusDiv);
+    
+    document.getElementById('openSettings').addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.runtime.openOptionsPage();
+    });
+  }
+  
   
   // Fetch topics from server
   async function loadTopics() {
     try {
+      // Check if API URL is configured
+      const result = await chrome.storage.sync.get(['apiUrl']);
+      if (!result.apiUrl) {
+        showSettingsReminder();
+        return;
+      }
+      
       const response = await chrome.runtime.sendMessage({
         action: 'getTopics'
       });
@@ -55,7 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function getPageDataSafely(tab) {
     // Check if this is a restricted page
     if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || 
-        tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
+        tab.url.startsWith('edge://') || tab.url.startsWith('about:') ||
+        tab.url.startsWith('moz-extension://') || tab.url.startsWith('safari-extension://')) {
       return {
         url: tab.url,
         title: tab.title || 'Unknown Page',
