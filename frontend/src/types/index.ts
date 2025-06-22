@@ -12,6 +12,7 @@ export interface Bookmark {
   domain?: string
   age?: string
   tags?: string[]
+  customProperties?: Record<string, string>
 }
 
 export interface Project {

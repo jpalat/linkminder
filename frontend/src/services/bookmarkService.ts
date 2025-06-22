@@ -11,6 +11,8 @@ export interface BookmarkCreateRequest {
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
+  tags?: string[]
+  customProperties?: Record<string, string>
 }
 
 export interface BookmarkUpdateRequest {
@@ -18,6 +20,8 @@ export interface BookmarkUpdateRequest {
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
+  tags?: string[]
+  customProperties?: Record<string, string>
 }
 
 export interface BookmarkFullUpdateRequest {
@@ -27,6 +31,8 @@ export interface BookmarkFullUpdateRequest {
   action?: string
   shareTo?: string
   topic?: string
+  tags?: string[]
+  customProperties?: Record<string, string>
 }
 
 export interface TriageBookmark {
@@ -39,6 +45,8 @@ export interface TriageBookmark {
   domain?: string
   age?: string
   action?: string
+  tags?: string[]
+  customProperties?: Record<string, string>
 }
 
 export interface TriageResponse {
@@ -195,7 +203,9 @@ class BookmarkService {
       topic: triageBookmark.topic,
       timestamp: triageBookmark.timestamp,
       domain: triageBookmark.domain || this.extractDomain(triageBookmark.url),
-      age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp)
+      age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp),
+      tags: triageBookmark.tags,
+      customProperties: triageBookmark.customProperties
     }
   }
 
@@ -368,7 +378,8 @@ class BookmarkService {
       timestamp: backendBookmark.timestamp || backendBookmark.created_at || new Date().toISOString(),
       domain: backendBookmark.domain || this.extractDomain(backendBookmark.url),
       age: backendBookmark.age || this.calculateAge(backendBookmark.timestamp || backendBookmark.created_at),
-      tags: backendBookmark.tags || undefined
+      tags: backendBookmark.tags || undefined,
+      customProperties: backendBookmark.customProperties || undefined
     }
   }
 
@@ -423,7 +434,9 @@ class BookmarkService {
       action: bookmark.action,
       shareTo: bookmark.shareTo,
       topic: bookmark.topic,
-      projectId: bookmark.project_id
+      projectId: bookmark.project_id,
+      tags: bookmark.tags,
+      customProperties: bookmark.customProperties
     }
   }
 
@@ -435,7 +448,9 @@ class BookmarkService {
       action: bookmark.action,
       shareTo: bookmark.shareTo,
       topic: bookmark.topic,
-      projectId: bookmark.project_id
+      projectId: bookmark.project_id,
+      tags: bookmark.tags,
+      customProperties: bookmark.customProperties
     }
   }
 
@@ -449,7 +464,9 @@ class BookmarkService {
       description: bookmark.description,
       action: bookmark.action,
       shareTo: bookmark.shareTo,
-      topic: bookmark.topic
+      topic: bookmark.topic,
+      tags: bookmark.tags,
+      customProperties: bookmark.customProperties
     }
   }
 
