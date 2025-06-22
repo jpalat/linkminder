@@ -93,7 +93,7 @@
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
                 @move-to-working="handleMoveToWorking"
-                @move-to-share="(id) => moveBookmarks([id], 'share')"
+                @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
               />
             </div>
@@ -163,7 +163,7 @@
           <AppButton size="sm" @click="moveSelectedTo('working')">
             Move to Working
           </AppButton>
-          <AppButton size="sm" @click="moveSelectedTo('share')">
+          <AppButton size="sm" @click="handleShareSelected">
             Share
           </AppButton>
           <AppButton size="sm" @click="moveSelectedTo('archived')">
@@ -202,6 +202,12 @@
       @submit="handleMoveToProject"
     />
 
+    <ShareBookmarkModal
+      v-model:show="showShareModal"
+      :bookmarks="bookmarksToShare"
+      @submit="handleShareBookmarks"
+    />
+
     <ConfirmModal
       v-model:show="showConfirmModal"
       :config="confirmConfig"
@@ -228,6 +234,7 @@ import ShareGroups from '@/components/share/ShareGroups.vue'
 import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
 import MoveToProjectModal from '@/components/modals/MoveToProjectModal.vue'
+import ShareBookmarkModal from '@/components/modals/ShareBookmarkModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
 import type { Bookmark } from '@/types'
 import { ServerStatus } from '@/utils/serverStatus'
@@ -267,8 +274,10 @@ const showSort = ref(false)
 const showAddModal = ref(false)
 const showEditModal = ref(false)
 const showMoveToProjectModal = ref(false)
+const showShareModal = ref(false)
 const showConfirmModal = ref(false)
 const selectedBookmark = ref<Bookmark | null>(null)
+const bookmarksToShare = ref<Bookmark[]>([])
 const confirmConfig = ref<ConfirmationConfig>({ type: 'custom' })
 const isProcessingConfirm = ref(false)
 const pendingConfirmAction = ref<(() => void) | null>(null)
@@ -361,6 +370,46 @@ const handleMoveToProject = async (bookmarkId: string, topic: string) => {
     selectedBookmark.value = null
   } catch (error) {
     console.error('Failed to move bookmark to project:', error)
+  }
+}
+
+const handleShareSingle = (bookmarkId: string) => {
+  const bookmark = filteredBookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    bookmarksToShare.value = [bookmark]
+    showShareModal.value = true
+  }
+}
+
+const handleShareSelected = () => {
+  const selectedIds = Array.from(selectedItems.value)
+  const selectedBookmarks = filteredBookmarks.value.filter(b => selectedIds.includes(b.id))
+  if (selectedBookmarks.length > 0) {
+    bookmarksToShare.value = selectedBookmarks
+    showShareModal.value = true
+  }
+}
+
+const handleShareBookmarks = async (shareData: { destination: string; notes?: string }) => {
+  try {
+    const updatePromises = bookmarksToShare.value.map(bookmark =>
+      updateBookmark(bookmark.id, { 
+        action: 'share', 
+        shareTo: shareData.destination 
+      })
+    )
+    
+    await Promise.all(updatePromises)
+    
+    // Clear selections if batch operation
+    if (bookmarksToShare.value.length > 1) {
+      clearSelection()
+    }
+    
+    showShareModal.value = false
+    bookmarksToShare.value = []
+  } catch (error) {
+    console.error('Failed to share bookmarks:', error)
   }
 }
 
