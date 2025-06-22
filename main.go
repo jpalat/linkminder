@@ -87,6 +87,8 @@ type TriageBookmark struct {
 	Age              string            `json:"age"`
 	Suggested        string            `json:"suggested"`
 	Topic            string            `json:"topic"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
 	Tags             []string          `json:"tags,omitempty"`
 	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
@@ -298,6 +300,7 @@ func main() {
 	http.HandleFunc("/topics", withCORS(handleTopics))
 	http.HandleFunc("/api/stats/summary", withCORS(handleStatsSummary))
 	http.HandleFunc("/api/bookmarks/triage", withCORS(handleTriageQueue))
+	http.HandleFunc("/api/bookmarks", withCORS(handleBookmarks))
 	http.HandleFunc("/api/projects", withCORS(handleProjects))
 	http.HandleFunc("/api/projects/", withCORS(handleProjectDetail))
 	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
@@ -311,6 +314,7 @@ func main() {
 	log.Printf("  GET /topics - Get list of available topics")
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
+	log.Printf("  GET /api/bookmarks?action={action} - Get bookmarks by action type")
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
 	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
 	log.Printf("  GET /api/projects/id/{id} - Get detailed view of a project by ID")
@@ -938,6 +942,74 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(triageData)
 }
 
+func handleBookmarks(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/bookmarks from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Bookmarks request received", map[string]interface{}{
+		"method":      r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters
+	query := r.URL.Query()
+	action := query.Get("action")
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+	
+	// Default to getting share bookmarks if no action specified
+	if action == "" {
+		action = "share"
+	}
+	
+	limit := 50 // default
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+	
+	offset := 0 // default
+	if offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Get bookmarks by action
+	bookmarksData, err := getBookmarksByAction(action, limit, offset)
+	if err != nil {
+		log.Printf("Failed to get bookmarks for action %s: %v", action, err)
+		logStructured("ERROR", "database", "Failed to get bookmarks", map[string]interface{}{
+			"error":  err.Error(),
+			"action": action,
+		})
+		http.Error(w, "Failed to get bookmarks", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully retrieved %d bookmarks for action %s", len(bookmarksData.Bookmarks), action)
+	logStructured("INFO", "database", "Bookmarks retrieved", map[string]interface{}{
+		"count":  len(bookmarksData.Bookmarks),
+		"total":  bookmarksData.Total,
+		"action": action,
+		"limit":  bookmarksData.Limit,
+		"offset": bookmarksData.Offset,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bookmarksData)
+}
+
 func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	logStructured("INFO", "database", "Getting triage queue", map[string]interface{}{
 		"limit":  limit,
@@ -1041,6 +1113,104 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating triage bookmarks: %v", err)
+	}
+
+	return &TriageResponse{
+		Bookmarks: bookmarks,
+		Total:     total,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, error) {
+	logStructured("INFO", "database", "Getting bookmarks by action", map[string]interface{}{
+		"action": action,
+		"limit":  limit,
+		"offset": offset,
+	})
+
+	// First get the total count
+	var total int
+	countSQL := `SELECT COUNT(*) FROM bookmarks WHERE action = ?`
+	
+	err := db.QueryRow(countSQL, action).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count bookmarks for action %s: %v", action, err)
+	}
+
+	// Get the bookmarks with all fields including tags and custom properties
+	querySQL := `
+		SELECT id, url, title, description, timestamp, topic, shareTo, tags, custom_properties
+		FROM bookmarks 
+		WHERE action = ?
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+	
+	rows, err := db.Query(querySQL, action, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bookmarks for action %s: %v", action, err)
+	}
+	defer rows.Close()
+
+	var bookmarks []TriageBookmark
+	for rows.Next() {
+		var bookmark TriageBookmark
+		var timestamp string
+		var description, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
+		
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic, &shareTo, &tagsJSON, &customPropsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bookmark: %v", err)
+		}
+		
+		// Set optional fields
+		if description.Valid {
+			bookmark.Description = description.String
+		}
+		if topic.Valid {
+			bookmark.Topic = topic.String
+		}
+		if shareTo.Valid {
+			bookmark.ShareTo = shareTo.String
+		}
+		
+		// Parse tags and custom properties from JSON
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
+		}
+		
+		if customPropsJSON.Valid && customPropsJSON.String != "" {
+			bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
+		}
+		
+		// Set the action for the response
+		bookmark.Action = action
+		
+		// Parse timestamp
+		bookmark.Timestamp = timestamp
+		
+		// Extract domain from URL
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host
+		} else {
+			bookmark.Domain = bookmark.URL
+		}
+		
+		// Calculate age
+		bookmark.Age = calculateAge(timestamp)
+		
+		// Generate suggested action
+		bookmark.Suggested = getSuggestedAction(bookmark.Domain, bookmark.Title, bookmark.Description)
+		
+		bookmarks = append(bookmarks, bookmark)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating bookmark rows: %v", err)
 	}
 
 	return &TriageResponse{
