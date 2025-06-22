@@ -29,30 +29,36 @@ type Project struct {
 }
 
 type BookmarkRequest struct {
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Content     string `json:"content,omitempty"`
-	Action      string `json:"action,omitempty"`
-	ShareTo     string `json:"shareTo,omitempty"`
-	Topic       string `json:"topic,omitempty"`     // Legacy support
-	ProjectID   int    `json:"projectId,omitempty"` // New field
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description,omitempty"`
+	Content          string            `json:"content,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`     // Legacy support
+	ProjectID        int               `json:"projectId,omitempty"` // New field
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type BookmarkUpdateRequest struct {
-	Action    string `json:"action,omitempty"`
-	ShareTo   string `json:"shareTo,omitempty"`
-	Topic     string `json:"topic,omitempty"`     // Legacy support
-	ProjectID int    `json:"projectId,omitempty"` // New field
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`     // Legacy support
+	ProjectID        int               `json:"projectId,omitempty"` // New field
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type BookmarkFullUpdateRequest struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Description string `json:"description,omitempty"`
-	Action      string `json:"action,omitempty"`
-	ShareTo     string `json:"shareTo,omitempty"`
-	Topic       string `json:"topic,omitempty"`
+	Title            string            `json:"title"`
+	URL              string            `json:"url"`
+	Description      string            `json:"description,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type ProjectStat struct {
@@ -72,15 +78,17 @@ type SummaryStats struct {
 }
 
 type TriageBookmark struct {
-	ID          int    `json:"id"`
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Timestamp   string `json:"timestamp"`
-	Domain      string `json:"domain"`
-	Age         string `json:"age"`
-	Suggested   string `json:"suggested"`
-	Topic       string `json:"topic"`
+	ID               int               `json:"id"`
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	Timestamp        string            `json:"timestamp"`
+	Domain           string            `json:"domain"`
+	Age              string            `json:"age"`
+	Suggested        string            `json:"suggested"`
+	Topic            string            `json:"topic"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type TriageResponse struct {
@@ -110,17 +118,19 @@ type ProjectsResponse struct {
 }
 
 type ProjectBookmark struct {
-	ID          int    `json:"id"`
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Content     string `json:"content"`
-	Timestamp   string `json:"timestamp"`
-	Domain      string `json:"domain"`
-	Age         string `json:"age"`
-	Action      string `json:"action"`
-	Topic       string `json:"topic"`
-	ShareTo     string `json:"shareTo"`
+	ID               int               `json:"id"`
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	Content          string            `json:"content"`
+	Timestamp        string            `json:"timestamp"`
+	Domain           string            `json:"domain"`
+	Age              string            `json:"age"`
+	Action           string            `json:"action"`
+	Topic            string            `json:"topic"`
+	ShareTo          string            `json:"shareTo"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type ProjectDetailResponse struct {
@@ -533,8 +543,29 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		"action": req.Action,
 	})
 	
+	// Fetch the created bookmark to return complete data
+	var bookmarkID int
+	err := db.QueryRow("SELECT id FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1", req.URL).Scan(&bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch created bookmark ID: %v", err)
+		// Still return success since the bookmark was saved
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		return
+	}
+	
+	// Get the complete bookmark data
+	createdBookmark, err := getBookmarkByID(bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch created bookmark: %v", err)
+		// Still return success since the bookmark was saved
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		return
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(createdBookmark)
 }
 
 func handleTopics(w http.ResponseWriter, r *http.Request) {
@@ -590,11 +621,15 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 		"content_length": len(req.Content),
 	})
 	
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
 	insertSQL := `
-	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic)
-	VALUES (?, ?, ?, ?, ?, ?, ?)`
+	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic, tags, custom_properties)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	
-	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic)
+	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic, tagsJSON, customPropsJSON)
 	if err != nil {
 		log.Printf("Failed to insert bookmark: %v", err)
 		logStructured("ERROR", "database", "Insert failed", map[string]interface{}{
@@ -1829,10 +1864,10 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 	}
 
 	var bookmark ProjectBookmark
-	var description, content, action, topic, shareTo sql.NullString
+	var description, content, action, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
 	
 	err := db.QueryRow(`
-		SELECT id, url, title, description, content, timestamp, action, topic, shareTo
+		SELECT id, url, title, description, content, timestamp, action, topic, shareTo, tags, custom_properties
 		FROM bookmarks 
 		WHERE id = ?`, id).Scan(
 		&bookmark.ID,
@@ -1844,6 +1879,8 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 		&action,
 		&topic,
 		&shareTo,
+		&tagsJSON,
+		&customPropsJSON,
 	)
 	
 	if err != nil {
@@ -1868,6 +1905,15 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 	}
 	if shareTo.Valid {
 		bookmark.ShareTo = shareTo.String
+	}
+
+	// Parse tags and custom properties from JSON
+	if tagsJSON.Valid && tagsJSON.String != "" {
+		bookmark.Tags = tagsFromJSON(tagsJSON.String)
+	}
+	
+	if customPropsJSON.Valid && customPropsJSON.String != "" {
+		bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
 	}
 
 	// Extract domain from URL
@@ -1922,6 +1968,55 @@ func calculateAge(timestamp string) string {
 	}
 }
 
+// Helper functions for handling JSON fields in database
+func tagsToJSON(tags []string) string {
+	if len(tags) == 0 {
+		return "[]"
+	}
+	jsonBytes, err := json.Marshal(tags)
+	if err != nil {
+		log.Printf("Error marshaling tags: %v", err)
+		return "[]"
+	}
+	return string(jsonBytes)
+}
+
+func tagsFromJSON(jsonStr string) []string {
+	if jsonStr == "" || jsonStr == "[]" {
+		return nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(jsonStr), &tags); err != nil {
+		log.Printf("Error unmarshaling tags: %v", err)
+		return nil
+	}
+	return tags
+}
+
+func customPropsToJSON(props map[string]string) string {
+	if len(props) == 0 {
+		return "{}"
+	}
+	jsonBytes, err := json.Marshal(props)
+	if err != nil {
+		log.Printf("Error marshaling custom properties: %v", err)
+		return "{}"
+	}
+	return string(jsonBytes)
+}
+
+func customPropsFromJSON(jsonStr string) map[string]string {
+	if jsonStr == "" || jsonStr == "{}" {
+		return nil
+	}
+	var props map[string]string
+	if err := json.Unmarshal([]byte(jsonStr), &props); err != nil {
+		log.Printf("Error unmarshaling custom properties: %v", err)
+		return nil
+	}
+	return props
+}
+
 func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 	log.Printf("Updating bookmark in database: %d", id)
 	
@@ -1974,9 +2069,13 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		topic = ""
 	}
 	
-	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ?, project_id = ? WHERE id = ?`
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
+	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ? WHERE id = ?`
 	
-	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, topic, projectID, id)
+	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, topic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		log.Printf("Failed to update bookmark: %v", err)
 		logStructured("ERROR", "database", "Update failed", map[string]interface{}{
@@ -2077,14 +2176,18 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		}
 	}
 	
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
 	// Update bookmark with all fields
 	updateSQL := `
 		UPDATE bookmarks 
-		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?
+		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ?
 		WHERE id = ?`
 	
 	result, err := db.Exec(updateSQL, 
-		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, id)
+		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		logStructured("ERROR", "database", "Failed to execute full bookmark update", map[string]interface{}{
 			"error": err.Error(),
