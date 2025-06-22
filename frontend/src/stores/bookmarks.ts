@@ -211,9 +211,31 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
 
   const updateBookmark = async (bookmarkId: string, updates: Partial<Bookmark>) => {
     try {
-      // For partial updates, use the PATCH endpoint
-      const backendUpdates = bookmarkService.toBackendUpdateRequest(updates)
-      const updatedBookmark = await bookmarkService.updateBookmark(bookmarkId, backendUpdates)
+      // Determine if we need full update (PUT) or partial update (PATCH)
+      const needsFullUpdate = updates.title !== undefined || updates.url !== undefined || 'description' in updates
+      
+      let updatedBookmark: Bookmark
+      
+      if (needsFullUpdate) {
+        // Get the current bookmark to merge with updates
+        const currentBookmark = bookmarks.value.find(b => b.id === bookmarkId)
+        if (!currentBookmark) {
+          throw new Error(`Bookmark with ID ${bookmarkId} not found`)
+        }
+        
+        // Merge current bookmark with updates for full update
+        const fullBookmark: Bookmark = {
+          ...currentBookmark,
+          ...updates
+        }
+        
+        const backendRequest = bookmarkService.toBackendFullUpdateRequest(fullBookmark)
+        updatedBookmark = await bookmarkService.updateBookmarkFull(bookmarkId, backendRequest)
+      } else {
+        // Use partial update for action/topic changes only
+        const backendUpdates = bookmarkService.toBackendUpdateRequest(updates)
+        updatedBookmark = await bookmarkService.updateBookmark(bookmarkId, backendUpdates)
+      }
       
       // Update local state
       const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
