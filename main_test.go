@@ -59,7 +59,9 @@ func setupTestDB(t *testing.T) *TestDB {
 		action TEXT,
 		shareTo TEXT,
 		topic TEXT,
-		project_id INTEGER REFERENCES projects(id)
+		project_id INTEGER REFERENCES projects(id),
+		tags TEXT DEFAULT '[]',
+		custom_properties TEXT DEFAULT '{}'
 	);`
 	
 	if _, err = db.Exec(createBookmarksTableSQL); err != nil {
@@ -366,13 +368,17 @@ func TestHandleBookmark_Success(t *testing.T) {
 			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 		
-		var response map[string]string
+		var response ProjectBookmark
 		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 		
-		if response["status"] != "success" {
-			t.Errorf("Expected status 'success', got %s", response["status"])
+		if response.URL != reqBody.URL {
+			t.Errorf("Expected URL '%s', got '%s'", reqBody.URL, response.URL)
+		}
+		
+		if response.Title != reqBody.Title {
+			t.Errorf("Expected title '%s', got '%s'", reqBody.Title, response.Title)
 		}
 		
 		// Verify bookmark was actually saved
