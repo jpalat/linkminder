@@ -119,6 +119,8 @@ type ProjectBookmark struct {
 	Domain      string `json:"domain"`
 	Age         string `json:"age"`
 	Action      string `json:"action"`
+	Topic       string `json:"topic"`
+	ShareTo     string `json:"shareTo"`
 }
 
 type ProjectDetailResponse struct {
@@ -302,7 +304,8 @@ func main() {
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
 	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
 	log.Printf("  GET /api/projects/id/{id} - Get detailed view of a project by ID")
-	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark")
+	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark (partial)")
+	log.Printf("  PUT /api/bookmarks/{id} - Update a bookmark (full)")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -1803,8 +1806,120 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		"id": bookmarkID,
 	})
 	
+	// Fetch and return the updated bookmark
+	updatedBookmark, err := getBookmarkByID(bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch updated bookmark: %v", err)
+		logStructured("ERROR", "database", "Failed to fetch updated bookmark", map[string]interface{}{
+			"error": err.Error(),
+			"id":    bookmarkID,
+		})
+		http.Error(w, "Failed to fetch updated bookmark", http.StatusInternalServerError)
+		return
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(updatedBookmark)
+}
+
+func getBookmarkByID(id int) (*ProjectBookmark, error) {
+	// Validate database connection
+	if err := validateDB(); err != nil {
+		return nil, fmt.Errorf("failed to validate database connection: %v", err)
+	}
+
+	var bookmark ProjectBookmark
+	var description, content, action, topic, shareTo sql.NullString
+	
+	err := db.QueryRow(`
+		SELECT id, url, title, description, content, timestamp, action, topic, shareTo
+		FROM bookmarks 
+		WHERE id = ?`, id).Scan(
+		&bookmark.ID,
+		&bookmark.URL,
+		&bookmark.Title,
+		&description,
+		&content,
+		&bookmark.Timestamp,
+		&action,
+		&topic,
+		&shareTo,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("bookmark not found")
+		}
+		return nil, fmt.Errorf("failed to query bookmark: %v", err)
+	}
+
+	// Handle nullable fields
+	if description.Valid {
+		bookmark.Description = description.String
+	}
+	if content.Valid {
+		bookmark.Content = content.String
+	}
+	if action.Valid {
+		bookmark.Action = action.String
+	}
+	if topic.Valid {
+		bookmark.Topic = topic.String
+	}
+	if shareTo.Valid {
+		bookmark.ShareTo = shareTo.String
+	}
+
+	// Extract domain from URL
+	bookmark.Domain = extractDomain(bookmark.URL)
+	
+	// Calculate age
+	bookmark.Age = calculateAge(bookmark.Timestamp)
+	
+	return &bookmark, nil
+}
+
+func extractDomain(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return "unknown"
+	}
+	return parsed.Hostname()
+}
+
+func calculateAge(timestamp string) string {
+	// Parse the timestamp
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		// Try alternative formats
+		t, err = time.Parse("2006-01-02 15:04:05", timestamp)
+		if err != nil {
+			return "unknown"
+		}
+	}
+	
+	now := time.Now()
+	diff := now.Sub(t)
+	
+	minutes := int(diff.Minutes())
+	hours := int(diff.Hours())
+	days := int(diff.Hours() / 24)
+	weeks := days / 7
+	months := days / 30
+	
+	if minutes < 1 {
+		return "just now"
+	} else if minutes < 60 {
+		return fmt.Sprintf("%dm", minutes)
+	} else if hours < 24 {
+		return fmt.Sprintf("%dh", hours)
+	} else if days < 7 {
+		return fmt.Sprintf("%dd", days)
+	} else if weeks < 4 {
+		return fmt.Sprintf("%dw", weeks)
+	} else {
+		return fmt.Sprintf("%dmo", months)
+	}
 }
 
 func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
