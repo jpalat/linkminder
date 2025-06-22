@@ -27,13 +27,21 @@ Load the extension directory directly for development:
 4. Select `manifest_v2.json` in the `extension` folder
 
 #### Safari
-1. Use Safari Web Extension Converter tool
-2. Convert the `build/safari/` directory
+1. Install Xcode from the Mac App Store
+2. Open Terminal and run:
+   ```bash
+   xcrun safari-web-extension-converter build/safari/
+   ```
+3. Follow the prompts to create an Xcode project
+4. Open the generated Xcode project
+5. Build and run the project (⌘+R)
+6. Enable the extension in Safari Preferences → Extensions
 
 ## 🛠️ Building Packages
 
 ### Prerequisites
 - `zip` command (install with `apt install zip` on Linux)
+- **For Safari**: Xcode (macOS only) for Safari Web Extension Converter
 
 ### Build Commands
 ```bash
@@ -50,15 +58,16 @@ npm run clean
 ### Generated Packages
 - `bookminder-chrome-v1.0.zip` - Chrome/Edge (Manifest V3)
 - `bookminder-firefox-v1.0.zip` - Firefox (Manifest V2)
-- `bookminder-safari-v1.0.zip` - Safari (Manifest V3)
+- `bookminder-safari-v1.0.zip` - Safari (Manifest V3, requires Xcode conversion)
 
 ## ⚙️ Configuration
 
 ### First Setup
 1. **Install extension** using instructions above
 2. **Configure API URL**:
-   - Right-click extension icon → "Options" (Chrome/Edge)
-   - `about:addons` → BookMinder → Preferences (Firefox)
+   - **Chrome/Edge**: Right-click extension icon → "Options"
+   - **Firefox**: `about:addons` → BookMinder → Preferences
+   - **Safari**: Safari menu → Preferences → Extensions → BookMinder → Preferences
 3. **Enter API URL**: `http://localhost:9090` (or your server URL)
 4. **Click "Save Settings"**
 
@@ -127,6 +136,13 @@ The extension communicates with the BookMinder API:
 4. **Extension not loading** - Verify manifest version matches browser
 
 ### Debug Mode
-- **Chrome**: `chrome://extensions/` → Details → Inspect views
+- **Chrome/Edge**: `chrome://extensions/` → Details → Inspect views
 - **Firefox**: `about:debugging` → Inspect
+- **Safari**: Develop menu → Web Extension Background Content (enable Develop menu first)
 - Check browser console for error messages
+
+### Safari-Specific Notes
+- Requires macOS and Xcode for development
+- Extension must be code-signed for distribution
+- Use Safari Web Extension Converter for manifest conversion
+- Enable Develop menu: Safari → Preferences → Advanced → Show Develop menu
