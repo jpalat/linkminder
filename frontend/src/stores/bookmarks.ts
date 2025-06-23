@@ -5,8 +5,12 @@ import { bookmarkService } from '@/services/bookmarkService'
 import { projectService } from '@/services/projectService'
 import { getErrorMessage, isApiError } from '@/services/api'
 import { getErrorDisplayMessage, isNetworkError } from '@/composables/useApiError'
+import { useNotifications } from '@/composables/useNotifications'
 
 export const useBookmarkStore = defineStore('bookmarks', () => {
+  // Initialize notifications
+  const { bookmarkCreated, bookmarkUpdated, apiError, networkError, bulkOperation } = useNotifications()
+  
   // State
   const bookmarks = ref<Bookmark[]>([])
   const projects = ref<Project[]>([])
@@ -67,21 +71,25 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
 
     // Apply age filter
     if (filters.value.age) {
-      // Implementation would depend on your age parsing logic
-      // This is a simplified version
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+      
       filtered = filtered.filter(b => {
-        if (!b.age) return false
+        const bookmarkDate = new Date(b.timestamp)
         switch (filters.value.age) {
           case 'today':
-            return b.age.includes('h')
+            return bookmarkDate >= today
           case 'yesterday':
-            return b.age === '1d'
+            return bookmarkDate >= yesterday && bookmarkDate < today
           case 'week':
-            return b.age.includes('h') || b.age.includes('d')
+            return bookmarkDate >= weekAgo
           case 'month':
-            return !b.age.includes('w') && !b.age.includes('m')
+            return bookmarkDate >= monthAgo
           case 'older':
-            return b.age.includes('w') || b.age.includes('m')
+            return bookmarkDate < monthAgo
           default:
             return true
         }
@@ -176,6 +184,36 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }))
   })
 
+  const availableTopics = computed(() => {
+    const topics = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.topic) {
+        topics.add(b.topic)
+      }
+    })
+    return Array.from(topics).sort()
+  })
+
+  const availableDomains = computed(() => {
+    const domains = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.domain) {
+        domains.add(b.domain)
+      }
+    })
+    return Array.from(domains).sort()
+  })
+
+  const availableShareDestinations = computed(() => {
+    const destinations = new Set<string>()
+    bookmarks.value.forEach(b => {
+      if (b.shareTo && b.shareTo.trim() !== '') {
+        destinations.add(b.shareTo)
+      }
+    })
+    return Array.from(destinations).sort()
+  })
+
   // Actions
   const updateFilters = (newFilters: Partial<FilterState>) => {
     filters.value = { ...filters.value, ...newFilters }
@@ -243,10 +281,15 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
         bookmarks.value[index] = { ...bookmarks.value[index], ...updatedBookmark }
       }
       
+      // Show success notification
+      bookmarkUpdated(updatedBookmark.title)
       console.log('Successfully updated bookmark:', updatedBookmark)
     } catch (err) {
       error.value = getErrorDisplayMessage(err)
       console.error('Error updating bookmark:', err)
+      
+      // Show error notification
+      apiError('update bookmark', err as Error)
       
       if (isNetworkError(err)) {
         isConnected.value = false
@@ -256,11 +299,30 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
 
-  const moveBookmarks = (bookmarkIds: string[], action: string) => {
-    bookmarkIds.forEach(id => {
-      updateBookmark(id, { action: action as any })
-    })
-    clearSelection()
+  const moveBookmarks = async (bookmarkIds: string[], action: string) => {
+    try {
+      // Update each bookmark
+      const promises = bookmarkIds.map(id => updateBookmark(id, { action: action as any }))
+      await Promise.all(promises)
+      
+      // Show bulk operation notification
+      const count = bookmarkIds.length
+      if (count > 1) {
+        const actionLabels: Record<string, string> = {
+          'working': 'moved to working',
+          'share': 'marked for sharing', 
+          'archived': 'archived',
+          'read-later': 'moved to triage'
+        }
+        const operation = actionLabels[action] || `updated to ${action}`
+        bulkOperation(count, operation)
+      }
+      
+      clearSelection()
+    } catch (err) {
+      console.error('Error in bulk move operation:', err)
+      apiError('move bookmarks', err as Error)
+    }
   }
 
   const loadBookmarks = async () => {
@@ -311,10 +373,15 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       // Add to local state
       bookmarks.value.unshift(newBookmark)
       
+      // Show success notification
+      bookmarkCreated(newBookmark.title)
       console.log('Successfully added bookmark:', newBookmark)
     } catch (err) {
       error.value = getErrorDisplayMessage(err)
       console.error('Error adding bookmark:', err)
+      
+      // Show error notification
+      apiError('create bookmark', err as Error)
       
       if (isNetworkError(err)) {
         isConnected.value = false
@@ -334,6 +401,10 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       apiDashboardStats.value = await bookmarkService.getDashboardStats()
     } catch (err) {
       console.error('Failed to load dashboard stats:', err)
+      // Only show network errors, not API errors (stats are optional)
+      if (isNetworkError(err)) {
+        networkError()
+      }
       // Keep using computed stats as fallback
     }
   }
@@ -375,6 +446,9 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     filteredBookmarks,
     dashboardStats,
     shareGroups,
+    availableTopics,
+    availableDomains,
+    availableShareDestinations,
     
     // Actions
     updateFilters,

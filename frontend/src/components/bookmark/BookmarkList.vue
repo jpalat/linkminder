@@ -27,7 +27,6 @@
         :selected="selectedItems.has(bookmark.id)"
         :batch-mode="batchMode"
         @toggle-selection="$emit('toggle-selection', $event)"
-        @preview="$emit('preview', $event)"
         @edit="$emit('edit', $event)"
         @move-to-working="$emit('move-to-working', $event)"
         @move-to-share="$emit('move-to-share', $event)"
@@ -63,7 +62,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'toggle-selection': [id: string]
-  'preview': [id: string]
   'edit': [id: string]
   'move-to-working': [id: string]
   'move-to-share': [id: string]

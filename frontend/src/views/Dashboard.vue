@@ -91,10 +91,9 @@
                 :show-results-count="hasActiveFilters"
                 :loading="loading"
                 @toggle-selection="toggleSelection"
-                @preview="handlePreview"
                 @edit="handleEdit"
-                @move-to-working="(id) => moveBookmarks([id], 'working')"
-                @move-to-share="(id) => moveBookmarks([id], 'share')"
+                @move-to-working="handleMoveToWorking"
+                @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
               />
             </div>
@@ -146,7 +145,6 @@
                 :bookmarks="filteredBookmarks"
                 :batch-mode="batchMode"
                 @toggle-selection="toggleSelection"
-                @preview="handlePreview"
                 @edit="handleEdit"
               />
             </div>
@@ -165,7 +163,7 @@
           <AppButton size="sm" @click="moveSelectedTo('working')">
             Move to Working
           </AppButton>
-          <AppButton size="sm" @click="moveSelectedTo('share')">
+          <AppButton size="sm" @click="handleShareSelected">
             Share
           </AppButton>
           <AppButton size="sm" @click="moveSelectedTo('archived')">
@@ -188,14 +186,6 @@
       @submit="handleAddBookmark"
     />
 
-    <PreviewModal
-      v-model:show="showPreviewModal"
-      :bookmark="selectedBookmark"
-      @edit="handleEdit"
-      @move-to-share="(id) => moveBookmarks([id], 'share')"
-      @move-to-working="(id) => moveBookmarks([id], 'working')"
-      @archive="(id) => moveBookmarks([id], 'archived')"
-    />
 
     <EditBookmarkModal
       v-model:show="showEditModal"
@@ -203,6 +193,19 @@
       :existing-topics="existingTopics"
       @submit="handleUpdateBookmark"
       @delete="handleDeleteBookmark"
+    />
+
+    <MoveToProjectModal
+      v-model:show="showMoveToProjectModal"
+      :bookmark="selectedBookmark"
+      :existing-topics="existingTopics"
+      @submit="handleMoveToProject"
+    />
+
+    <ShareBookmarkModal
+      v-model:show="showShareModal"
+      :bookmarks="bookmarksToShare"
+      @submit="handleShareBookmarks"
     />
 
     <ConfirmModal
@@ -229,8 +232,9 @@ import SortPanel from '@/components/ui/SortPanel.vue'
 import ProjectList from '@/components/project/ProjectList.vue'
 import ShareGroups from '@/components/share/ShareGroups.vue'
 import AddBookmarkModal from '@/components/modals/AddBookmarkModal.vue'
-import PreviewModal from '@/components/modals/PreviewModal.vue'
 import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
+import MoveToProjectModal from '@/components/modals/MoveToProjectModal.vue'
+import ShareBookmarkModal from '@/components/modals/ShareBookmarkModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
 import type { Bookmark } from '@/types'
 import { ServerStatus } from '@/utils/serverStatus'
@@ -268,10 +272,12 @@ const searchQuery = ref('')
 const showFilters = ref(false)
 const showSort = ref(false)
 const showAddModal = ref(false)
-const showPreviewModal = ref(false)
 const showEditModal = ref(false)
+const showMoveToProjectModal = ref(false)
+const showShareModal = ref(false)
 const showConfirmModal = ref(false)
 const selectedBookmark = ref<Bookmark | null>(null)
+const bookmarksToShare = ref<Bookmark[]>([])
 const confirmConfig = ref<ConfirmationConfig>({ type: 'custom' })
 const isProcessingConfirm = ref(false)
 const pendingConfirmAction = ref<(() => void) | null>(null)
@@ -341,19 +347,69 @@ const handleSearch = (query: string) => {
   updateFilters({ search: query })
 }
 
-const handlePreview = (bookmarkId: string) => {
-  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
-  if (bookmark) {
-    selectedBookmark.value = bookmark
-    showPreviewModal.value = true
-  }
-}
-
 const handleEdit = (bookmarkId: string) => {
   const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
   if (bookmark) {
     selectedBookmark.value = bookmark
     showEditModal.value = true
+  }
+}
+
+const handleMoveToWorking = (bookmarkId: string) => {
+  const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    selectedBookmark.value = bookmark
+    showMoveToProjectModal.value = true
+  }
+}
+
+const handleMoveToProject = async (bookmarkId: string, topic: string) => {
+  try {
+    await updateBookmark(bookmarkId, { action: 'working', topic })
+    showMoveToProjectModal.value = false
+    selectedBookmark.value = null
+  } catch (error) {
+    console.error('Failed to move bookmark to project:', error)
+  }
+}
+
+const handleShareSingle = (bookmarkId: string) => {
+  const bookmark = filteredBookmarks.value.find(b => b.id === bookmarkId)
+  if (bookmark) {
+    bookmarksToShare.value = [bookmark]
+    showShareModal.value = true
+  }
+}
+
+const handleShareSelected = () => {
+  const selectedIds = Array.from(selectedItems.value)
+  const selectedBookmarks = filteredBookmarks.value.filter(b => selectedIds.includes(b.id))
+  if (selectedBookmarks.length > 0) {
+    bookmarksToShare.value = selectedBookmarks
+    showShareModal.value = true
+  }
+}
+
+const handleShareBookmarks = async (shareData: { destination: string; notes?: string }) => {
+  try {
+    const updatePromises = bookmarksToShare.value.map(bookmark =>
+      updateBookmark(bookmark.id, { 
+        action: 'share', 
+        shareTo: shareData.destination 
+      })
+    )
+    
+    await Promise.all(updatePromises)
+    
+    // Clear selections if batch operation
+    if (bookmarksToShare.value.length > 1) {
+      clearSelection()
+    }
+    
+    showShareModal.value = false
+    bookmarksToShare.value = []
+  } catch (error) {
+    console.error('Failed to share bookmarks:', error)
   }
 }
 
@@ -774,7 +830,9 @@ onMounted(async () => {
   }
   
   .main-content {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   
   .search-container {
@@ -788,6 +846,12 @@ onMounted(async () => {
   .tab-button {
     font-size: var(--font-size-xs);
     padding: var(--spacing-xs) var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: var(--spacing-sm);
   }
 }
 </style>

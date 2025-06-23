@@ -6,7 +6,6 @@
         v-model="searchQuery"
         icon="🔍"
         placeholder="Search bookmarks by title, URL, or content..."
-        @input="handleSearchInput"
       />
       <AppButton 
         size="sm" 
@@ -28,10 +27,13 @@
               <option value="">All Topics</option>
               <option value="has-topic">Has Topic</option>
               <option value="no-topic">No Topic</option>
-              <option value="ai-tools">AI Tools</option>
-              <option value="react-migration">React Migration</option>
-              <option value="css-learning">CSS Learning</option>
-              <option value="framework-research">Framework Research</option>
+              <option 
+                v-for="topic in availableTopics" 
+                :key="topic" 
+                :value="topic"
+              >
+                {{ topic }}
+              </option>
             </select>
           </div>
           
@@ -39,11 +41,13 @@
             <label class="filter-label">Domain</label>
             <select v-model="localFilters.domain" class="filter-select">
               <option value="">All Domains</option>
-              <option value="react.dev">react.dev</option>
-              <option value="openai.com">openai.com</option>
-              <option value="css-tricks.com">css-tricks.com</option>
-              <option value="logrocket.com">logrocket.com</option>
-              <option value="microsoft.com">microsoft.com</option>
+              <option 
+                v-for="domain in availableDomains" 
+                :key="domain" 
+                :value="domain"
+              >
+                {{ domain }}
+              </option>
             </select>
           </div>
           
@@ -99,26 +103,43 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 
 const bookmarkStore = useBookmarkStore()
-const { filters } = storeToRefs(bookmarkStore)
+const { filters, availableTopics, availableDomains } = storeToRefs(bookmarkStore)
 const { updateFilters, clearFilters } = bookmarkStore
 
 // Local reactive copy of filters
 const localFilters = ref<FilterState>({ ...filters.value })
 const searchQuery = ref(filters.value.search || '')
+
+// Ensure search is properly initialized in localFilters
+if (searchQuery.value) {
+  localFilters.value.search = searchQuery.value
+}
 const showAdvanced = ref(false)
 
 // Watch for external filter changes
 watch(filters, (newFilters) => {
   localFilters.value = { ...newFilters }
+  searchQuery.value = newFilters.search || ''
 }, { deep: true })
+
+// Watch for search query changes and apply filters immediately
+watch(searchQuery, (newSearchQuery) => {
+  localFilters.value.search = newSearchQuery
+  applyFilters()
+})
 
 // Computed
 const hasActiveFilters = computed(() => {
-  return Object.values(localFilters.value).some(value => value && value.trim() !== '')
+  return Object.values(localFilters.value).some(value => value && value.trim() !== '') ||
+         (searchQuery.value && searchQuery.value.trim() !== '')
 })
 
 const activeFilterTags = computed(() => {
   const tags: Record<string, string> = {}
+  
+  if (searchQuery.value && searchQuery.value.trim() !== '') {
+    tags.search = `Search: "${searchQuery.value}"`
+  }
   
   if (localFilters.value.topic) {
     if (localFilters.value.topic === 'has-topic') {
@@ -148,6 +169,7 @@ const applyFilters = () => {
 
 const clearAllFilters = () => {
   localFilters.value = {}
+  searchQuery.value = ''
   clearFilters()
 }
 
@@ -159,10 +181,6 @@ const removeFilter = (filterKey: string) => {
   applyFilters()
 }
 
-const handleSearchInput = (value: string) => {
-  localFilters.value.search = value
-  applyFilters()
-}
 </script>
 
 <style scoped>

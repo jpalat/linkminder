@@ -56,13 +56,6 @@
     <div class="bookmark-actions">
       <AppButton
         size="xs"
-        variant="info"
-        @click.stop="$emit('preview', bookmark.id)"
-      >
-        👁️
-      </AppButton>
-      <AppButton
-        size="xs"
         variant="secondary"
         @click.stop="$emit('edit', bookmark.id)"
       >
@@ -115,7 +108,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'toggle-selection': [id: string]
-  'preview': [id: string]
   'edit': [id: string]
   'move-to-working': [id: string]
   'move-to-share': [id: string]
@@ -283,13 +275,77 @@ const truncateText = (text: string, maxLength: number) => {
   .bookmark-card {
     flex-direction: column;
     align-items: stretch;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .bookmark-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .bookmark-title {
+    font-size: 0.85rem;
+    line-height: 1.3;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  .bookmark-url {
+    font-size: 0.75rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
   }
   
   .bookmark-actions {
     flex-direction: row;
     justify-content: flex-end;
-    opacity: 1;
+    opacity: 1 !important;
     margin-top: var(--spacing-sm);
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 100%;
+  }
+  
+  .bookmark-meta {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* Touch devices - ensure actions are always visible */
+@media (hover: none) and (pointer: coarse) {
+  .bookmark-actions {
+    opacity: 1 !important;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+  .bookmark-card {
+    padding: var(--spacing-sm);
+  }
+  
+  .bookmark-title {
+    font-size: 0.8rem;
+  }
+  
+  .bookmark-url {
+    font-size: 0.7rem;
+  }
+  
+  .bookmark-actions {
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  .bookmark-meta {
+    gap: var(--spacing-xs);
+    font-size: 0.7rem;
   }
 }
 </style>
