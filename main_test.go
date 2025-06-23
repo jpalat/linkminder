@@ -59,7 +59,9 @@ func setupTestDB(t *testing.T) *TestDB {
 		action TEXT,
 		shareTo TEXT,
 		topic TEXT,
-		project_id INTEGER REFERENCES projects(id)
+		project_id INTEGER REFERENCES projects(id),
+		tags TEXT DEFAULT '[]',
+		custom_properties TEXT DEFAULT '{}'
 	);`
 	
 	if _, err = db.Exec(createBookmarksTableSQL); err != nil {
@@ -366,13 +368,17 @@ func TestHandleBookmark_Success(t *testing.T) {
 			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 		
-		var response map[string]string
+		var response ProjectBookmark
 		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 		
-		if response["status"] != "success" {
-			t.Errorf("Expected status 'success', got %s", response["status"])
+		if response.URL != reqBody.URL {
+			t.Errorf("Expected URL '%s', got '%s'", reqBody.URL, response.URL)
+		}
+		
+		if response.Title != reqBody.Title {
+			t.Errorf("Expected title '%s', got '%s'", reqBody.Title, response.Title)
 		}
 		
 		// Verify bookmark was actually saved
@@ -2928,5 +2934,366 @@ func TestProjectDetailPage_ErrorHandling(t *testing.T) {
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("Expected status %d for missing project ID, got %d", http.StatusBadRequest, rr.Code)
 		}
+	})
+}
+
+// Test Bookmark Update Endpoints - PUT vs PATCH
+func TestBookmarkUpdate_PutVsPatch(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert a test bookmark
+		insertSQL := `
+		INSERT INTO bookmarks (url, title, description, action, topic, shareTo, timestamp)
+		VALUES (?, ?, ?, ?, ?, ?, '2023-12-01 10:00:00')`
+		
+		result, err := tdb.db.Exec(insertSQL, 
+			"https://original.example.com", 
+			"Original Title", 
+			"Original description", 
+			"read-later", 
+			"OriginalTopic",
+			"")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarkID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+
+		t.Run("PATCH should update metadata only", func(t *testing.T) {
+			// Test PATCH request (partial update - metadata only)
+			patchData := BookmarkUpdateRequest{
+				Action:  "working",
+				Topic:   "UpdatedTopic",
+				ShareTo: "Newsletter",
+			}
+			
+			jsonData, _ := json.Marshal(patchData)
+			req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("PATCH request failed with status %d, body: %s", rr.Code, rr.Body.String())
+			}
+			
+			// Verify response contains updated bookmark
+			var response ProjectBookmark
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal PATCH response: %v", err)
+			}
+			
+			// Check that metadata was updated
+			if response.Action != "working" {
+				t.Errorf("Expected action 'working', got %s", response.Action)
+			}
+			if response.Topic != "UpdatedTopic" {
+				t.Errorf("Expected topic 'UpdatedTopic', got %s", response.Topic)
+			}
+			if response.ShareTo != "Newsletter" {
+				t.Errorf("Expected shareTo 'Newsletter', got %s", response.ShareTo)
+			}
+			
+			// Check that content fields were preserved
+			if response.Title != "Original Title" {
+				t.Errorf("Expected title preserved as 'Original Title', got %s", response.Title)
+			}
+			if response.URL != "https://original.example.com" {
+				t.Errorf("Expected URL preserved, got %s", response.URL)
+			}
+			if response.Description != "Original description" {
+				t.Errorf("Expected description preserved, got %s", response.Description)
+			}
+			
+			// Check computed fields
+			if response.Domain != "original.example.com" {
+				t.Errorf("Expected domain 'original.example.com', got %s", response.Domain)
+			}
+			if response.Age == "" {
+				t.Error("Expected age to be calculated")
+			}
+		})
+
+		t.Run("PUT should update all fields", func(t *testing.T) {
+			// Test PUT request (full update - can update title, URL, description)
+			putData := BookmarkFullUpdateRequest{
+				Title:       "UPDATED: New Title",
+				URL:         "https://updated.example.com/new-path",
+				Description: "Completely new description",
+				Action:      "share",
+				Topic:       "NewTopic",
+				ShareTo:     "Team Slack",
+			}
+			
+			jsonData, _ := json.Marshal(putData)
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("PUT request failed with status %d, body: %s", rr.Code, rr.Body.String())
+			}
+			
+			// Verify response contains updated bookmark
+			var response ProjectBookmark
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal PUT response: %v", err)
+			}
+			
+			// Check that ALL fields were updated
+			if response.Title != "UPDATED: New Title" {
+				t.Errorf("Expected title 'UPDATED: New Title', got %s", response.Title)
+			}
+			if response.URL != "https://updated.example.com/new-path" {
+				t.Errorf("Expected URL 'https://updated.example.com/new-path', got %s", response.URL)
+			}
+			if response.Description != "Completely new description" {
+				t.Errorf("Expected description 'Completely new description', got %s", response.Description)
+			}
+			if response.Action != "share" {
+				t.Errorf("Expected action 'share', got %s", response.Action)
+			}
+			if response.Topic != "NewTopic" {
+				t.Errorf("Expected topic 'NewTopic', got %s", response.Topic)
+			}
+			if response.ShareTo != "Team Slack" {
+				t.Errorf("Expected shareTo 'Team Slack', got %s", response.ShareTo)
+			}
+			
+			// Check computed fields were recalculated
+			if response.Domain != "updated.example.com" {
+				t.Errorf("Expected domain 'updated.example.com', got %s", response.Domain)
+			}
+			if response.Age == "" {
+				t.Error("Expected age to be calculated")
+			}
+			
+			// Verify the changes persisted in database
+			var dbTitle, dbURL, dbDescription, dbAction, dbTopic, dbShareTo string
+			err = tdb.db.QueryRow(`
+				SELECT title, url, description, action, topic, shareTo 
+				FROM bookmarks WHERE id = ?`, bookmarkID).Scan(
+				&dbTitle, &dbURL, &dbDescription, &dbAction, &dbTopic, &dbShareTo)
+			if err != nil {
+				t.Fatalf("Failed to query updated bookmark from database: %v", err)
+			}
+			
+			if dbTitle != "UPDATED: New Title" {
+				t.Errorf("Title not persisted in database. Expected 'UPDATED: New Title', got %s", dbTitle)
+			}
+			if dbURL != "https://updated.example.com/new-path" {
+				t.Errorf("URL not persisted in database. Got %s", dbURL)
+			}
+		})
+	})
+}
+
+// Test that PUT endpoint validates required fields
+func TestBookmarkUpdate_PUT_Validation(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert a test bookmark
+		insertSQL := `
+		INSERT INTO bookmarks (url, title, description, timestamp)
+		VALUES (?, ?, ?, '2023-12-01 10:00:00')`
+		
+		result, err := tdb.db.Exec(insertSQL, 
+			"https://test.example.com", "Test Title", "Test description")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarkID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+
+		t.Run("PUT should reject missing title", func(t *testing.T) {
+			putData := BookmarkFullUpdateRequest{
+				// Title missing
+				URL:         "https://test.example.com",
+				Description: "Test description",
+			}
+			
+			jsonData, _ := json.Marshal(putData)
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusInternalServerError {
+				t.Errorf("Expected status %d for missing title, got %d", http.StatusInternalServerError, rr.Code)
+			}
+		})
+
+		t.Run("PUT should reject missing URL", func(t *testing.T) {
+			putData := BookmarkFullUpdateRequest{
+				Title: "Test Title",
+				// URL missing
+				Description: "Test description",
+			}
+			
+			jsonData, _ := json.Marshal(putData)
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusInternalServerError {
+				t.Errorf("Expected status %d for missing URL, got %d", http.StatusInternalServerError, rr.Code)
+			}
+		})
+	})
+}
+
+// Test error handling for non-existent bookmarks
+func TestBookmarkUpdate_ErrorHandling(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		t.Run("PATCH should handle non-existent bookmark", func(t *testing.T) {
+			patchData := BookmarkUpdateRequest{Action: "working"}
+			jsonData, _ := json.Marshal(patchData)
+			
+			req := httptest.NewRequest("PATCH", "/api/bookmarks/99999", bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusInternalServerError {
+				t.Errorf("Expected status %d for non-existent bookmark, got %d", http.StatusInternalServerError, rr.Code)
+			}
+		})
+
+		t.Run("PUT should handle non-existent bookmark", func(t *testing.T) {
+			putData := BookmarkFullUpdateRequest{
+				Title: "Test",
+				URL:   "https://test.com",
+			}
+			jsonData, _ := json.Marshal(putData)
+			
+			req := httptest.NewRequest("PUT", "/api/bookmarks/99999", bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusInternalServerError {
+				t.Errorf("Expected status %d for non-existent bookmark, got %d", http.StatusInternalServerError, rr.Code)
+			}
+		})
+
+		t.Run("Should reject invalid bookmark ID", func(t *testing.T) {
+			patchData := BookmarkUpdateRequest{Action: "working"}
+			jsonData, _ := json.Marshal(patchData)
+			
+			req := httptest.NewRequest("PATCH", "/api/bookmarks/invalid-id", bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusBadRequest {
+				t.Errorf("Expected status %d for invalid bookmark ID, got %d", http.StatusBadRequest, rr.Code)
+			}
+		})
+
+		t.Run("Should reject unsupported HTTP methods", func(t *testing.T) {
+			req := httptest.NewRequest("DELETE", "/api/bookmarks/1", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Expected status %d for unsupported method, got %d", http.StatusMethodNotAllowed, rr.Code)
+			}
+		})
+	})
+}
+
+// Test that response format matches frontend expectations
+func TestBookmarkUpdate_ResponseFormat(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert a test bookmark
+		insertSQL := `
+		INSERT INTO bookmarks (url, title, description, action, topic, timestamp)
+		VALUES (?, ?, ?, ?, ?, '2023-12-01 10:00:00')`
+		
+		result, err := tdb.db.Exec(insertSQL, 
+			"https://format-test.example.com", "Format Test", "Test description", "read-later", "TestTopic")
+		if err != nil {
+			t.Fatalf("Failed to insert test bookmark: %v", err)
+		}
+		
+		bookmarkID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+
+		t.Run("Response should include all expected fields", func(t *testing.T) {
+			patchData := BookmarkUpdateRequest{Action: "working"}
+			jsonData, _ := json.Marshal(patchData)
+			
+			req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleBookmarkUpdate(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Fatalf("Request failed with status %d", rr.Code)
+			}
+			
+			var response ProjectBookmark
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Check all expected fields are present and have correct types
+			if response.ID == 0 {
+				t.Error("Expected ID to be set")
+			}
+			if response.URL == "" {
+				t.Error("Expected URL to be set")
+			}
+			if response.Title == "" {
+				t.Error("Expected Title to be set")
+			}
+			if response.Timestamp == "" {
+				t.Error("Expected Timestamp to be set")
+			}
+			if response.Domain == "" {
+				t.Error("Expected Domain to be calculated")
+			}
+			if response.Age == "" {
+				t.Error("Expected Age to be calculated")
+			}
+			
+			// Verify domain calculation
+			if response.Domain != "format-test.example.com" {
+				t.Errorf("Expected domain 'format-test.example.com', got %s", response.Domain)
+			}
+			
+			// Verify age calculation format
+			validAgeFormats := []string{"just now", "1m", "1h", "1d", "1w", "1mo"}
+			ageValid := false
+			for _, format := range validAgeFormats {
+				if strings.HasSuffix(response.Age, format[len(format)-1:]) || response.Age == "just now" {
+					ageValid = true
+					break
+				}
+			}
+			if !ageValid {
+				t.Errorf("Age format seems invalid: %s", response.Age)
+			}
+		})
 	})
 }

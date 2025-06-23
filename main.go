@@ -29,30 +29,36 @@ type Project struct {
 }
 
 type BookmarkRequest struct {
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Content     string `json:"content,omitempty"`
-	Action      string `json:"action,omitempty"`
-	ShareTo     string `json:"shareTo,omitempty"`
-	Topic       string `json:"topic,omitempty"`     // Legacy support
-	ProjectID   int    `json:"projectId,omitempty"` // New field
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description,omitempty"`
+	Content          string            `json:"content,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`     // Legacy support
+	ProjectID        int               `json:"projectId,omitempty"` // New field
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type BookmarkUpdateRequest struct {
-	Action    string `json:"action,omitempty"`
-	ShareTo   string `json:"shareTo,omitempty"`
-	Topic     string `json:"topic,omitempty"`     // Legacy support
-	ProjectID int    `json:"projectId,omitempty"` // New field
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`     // Legacy support
+	ProjectID        int               `json:"projectId,omitempty"` // New field
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type BookmarkFullUpdateRequest struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Description string `json:"description,omitempty"`
-	Action      string `json:"action,omitempty"`
-	ShareTo     string `json:"shareTo,omitempty"`
-	Topic       string `json:"topic,omitempty"`
+	Title            string            `json:"title"`
+	URL              string            `json:"url"`
+	Description      string            `json:"description,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Topic            string            `json:"topic,omitempty"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type ProjectStat struct {
@@ -72,15 +78,19 @@ type SummaryStats struct {
 }
 
 type TriageBookmark struct {
-	ID          int    `json:"id"`
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Timestamp   string `json:"timestamp"`
-	Domain      string `json:"domain"`
-	Age         string `json:"age"`
-	Suggested   string `json:"suggested"`
-	Topic       string `json:"topic"`
+	ID               int               `json:"id"`
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	Timestamp        string            `json:"timestamp"`
+	Domain           string            `json:"domain"`
+	Age              string            `json:"age"`
+	Suggested        string            `json:"suggested"`
+	Topic            string            `json:"topic"`
+	Action           string            `json:"action,omitempty"`
+	ShareTo          string            `json:"shareTo,omitempty"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type TriageResponse struct {
@@ -110,15 +120,19 @@ type ProjectsResponse struct {
 }
 
 type ProjectBookmark struct {
-	ID          int    `json:"id"`
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Content     string `json:"content"`
-	Timestamp   string `json:"timestamp"`
-	Domain      string `json:"domain"`
-	Age         string `json:"age"`
-	Action      string `json:"action"`
+	ID               int               `json:"id"`
+	URL              string            `json:"url"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	Content          string            `json:"content"`
+	Timestamp        string            `json:"timestamp"`
+	Domain           string            `json:"domain"`
+	Age              string            `json:"age"`
+	Action           string            `json:"action"`
+	Topic            string            `json:"topic"`
+	ShareTo          string            `json:"shareTo"`
+	Tags             []string          `json:"tags,omitempty"`
+	CustomProperties map[string]string `json:"customProperties,omitempty"`
 }
 
 type ProjectDetailResponse struct {
@@ -279,17 +293,18 @@ func main() {
 	log.Printf("Registering HTTP handlers")
 	logStructured("INFO", "startup", "Registering HTTP handlers", nil)
 	
-	http.HandleFunc("/", handleDashboard)
-	http.HandleFunc("/projects", handleProjectsPage)
-	http.HandleFunc("/project-detail", handleProjectDetailPage)
-	http.HandleFunc("/bookmark", handleBookmark)
-	http.HandleFunc("/topics", handleTopics)
-	http.HandleFunc("/api/stats/summary", handleStatsSummary)
-	http.HandleFunc("/api/bookmarks/triage", handleTriageQueue)
-	http.HandleFunc("/api/projects", handleProjects)
-	http.HandleFunc("/api/projects/", handleProjectDetail)
-	http.HandleFunc("/api/projects/id/", handleProjectByID)
-	http.HandleFunc("/api/bookmarks/", handleBookmarkUpdate)
+	http.HandleFunc("/", withCORS(handleDashboard))
+	http.HandleFunc("/projects", withCORS(handleProjectsPage))
+	http.HandleFunc("/project-detail", withCORS(handleProjectDetailPage))
+	http.HandleFunc("/bookmark", withCORS(handleBookmark))
+	http.HandleFunc("/topics", withCORS(handleTopics))
+	http.HandleFunc("/api/stats/summary", withCORS(handleStatsSummary))
+	http.HandleFunc("/api/bookmarks/triage", withCORS(handleTriageQueue))
+	http.HandleFunc("/api/bookmarks", withCORS(handleBookmarks))
+	http.HandleFunc("/api/projects", withCORS(handleProjects))
+	http.HandleFunc("/api/projects/", withCORS(handleProjectDetail))
+	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
+	http.HandleFunc("/api/bookmarks/", withCORS(handleBookmarkUpdate))
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
@@ -299,10 +314,12 @@ func main() {
 	log.Printf("  GET /topics - Get list of available topics")
 	log.Printf("  GET /api/stats/summary - Get dashboard summary statistics")
 	log.Printf("  GET /api/bookmarks/triage - Get bookmarks needing triage")
+	log.Printf("  GET /api/bookmarks?action={action} - Get bookmarks by action type")
 	log.Printf("  GET /api/projects - Get active projects and reference collections")
 	log.Printf("  GET /api/projects/{topic} - Get detailed view of a specific project")
 	log.Printf("  GET /api/projects/id/{id} - Get detailed view of a project by ID")
-	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark")
+	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark (partial)")
+	log.Printf("  PUT /api/bookmarks/{id} - Update a bookmark (full)")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -320,6 +337,31 @@ func main() {
 		})
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+// CORSMiddleware adds CORS headers to all responses
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
+
+		// Handle preflight OPTIONS requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	}
+}
+
+// Helper function to wrap handlers with CORS
+func withCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return corsMiddleware(handler)
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -505,8 +547,29 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		"action": req.Action,
 	})
 	
+	// Fetch the created bookmark to return complete data
+	var bookmarkID int
+	err := db.QueryRow("SELECT id FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1", req.URL).Scan(&bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch created bookmark ID: %v", err)
+		// Still return success since the bookmark was saved
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		return
+	}
+	
+	// Get the complete bookmark data
+	createdBookmark, err := getBookmarkByID(bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch created bookmark: %v", err)
+		// Still return success since the bookmark was saved
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		return
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(createdBookmark)
 }
 
 func handleTopics(w http.ResponseWriter, r *http.Request) {
@@ -562,11 +625,15 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 		"content_length": len(req.Content),
 	})
 	
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
 	insertSQL := `
-	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic)
-	VALUES (?, ?, ?, ?, ?, ?, ?)`
+	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic, tags, custom_properties)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	
-	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic)
+	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic, tagsJSON, customPropsJSON)
 	if err != nil {
 		log.Printf("Failed to insert bookmark: %v", err)
 		logStructured("ERROR", "database", "Insert failed", map[string]interface{}{
@@ -875,6 +942,74 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(triageData)
 }
 
+func handleBookmarks(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/bookmarks from %s", r.Method, r.RemoteAddr)
+	
+	logStructured("INFO", "api", "Bookmarks request received", map[string]interface{}{
+		"method":      r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != http.MethodGet {
+		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method":   r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters
+	query := r.URL.Query()
+	action := query.Get("action")
+	limitStr := query.Get("limit")
+	offsetStr := query.Get("offset")
+	
+	// Default to getting share bookmarks if no action specified
+	if action == "" {
+		action = "share"
+	}
+	
+	limit := 50 // default
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+	
+	offset := 0 // default
+	if offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	// Get bookmarks by action
+	bookmarksData, err := getBookmarksByAction(action, limit, offset)
+	if err != nil {
+		log.Printf("Failed to get bookmarks for action %s: %v", action, err)
+		logStructured("ERROR", "database", "Failed to get bookmarks", map[string]interface{}{
+			"error":  err.Error(),
+			"action": action,
+		})
+		http.Error(w, "Failed to get bookmarks", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully retrieved %d bookmarks for action %s", len(bookmarksData.Bookmarks), action)
+	logStructured("INFO", "database", "Bookmarks retrieved", map[string]interface{}{
+		"count":  len(bookmarksData.Bookmarks),
+		"total":  bookmarksData.Total,
+		"action": action,
+		"limit":  bookmarksData.Limit,
+		"offset": bookmarksData.Offset,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bookmarksData)
+}
+
 func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	logStructured("INFO", "database", "Getting triage queue", map[string]interface{}{
 		"limit":  limit,
@@ -978,6 +1113,104 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating triage bookmarks: %v", err)
+	}
+
+	return &TriageResponse{
+		Bookmarks: bookmarks,
+		Total:     total,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, error) {
+	logStructured("INFO", "database", "Getting bookmarks by action", map[string]interface{}{
+		"action": action,
+		"limit":  limit,
+		"offset": offset,
+	})
+
+	// First get the total count
+	var total int
+	countSQL := `SELECT COUNT(*) FROM bookmarks WHERE action = ?`
+	
+	err := db.QueryRow(countSQL, action).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count bookmarks for action %s: %v", action, err)
+	}
+
+	// Get the bookmarks with all fields including tags and custom properties
+	querySQL := `
+		SELECT id, url, title, description, timestamp, topic, shareTo, tags, custom_properties
+		FROM bookmarks 
+		WHERE action = ?
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+	
+	rows, err := db.Query(querySQL, action, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bookmarks for action %s: %v", action, err)
+	}
+	defer rows.Close()
+
+	var bookmarks []TriageBookmark
+	for rows.Next() {
+		var bookmark TriageBookmark
+		var timestamp string
+		var description, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
+		
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic, &shareTo, &tagsJSON, &customPropsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bookmark: %v", err)
+		}
+		
+		// Set optional fields
+		if description.Valid {
+			bookmark.Description = description.String
+		}
+		if topic.Valid {
+			bookmark.Topic = topic.String
+		}
+		if shareTo.Valid {
+			bookmark.ShareTo = shareTo.String
+		}
+		
+		// Parse tags and custom properties from JSON
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
+		}
+		
+		if customPropsJSON.Valid && customPropsJSON.String != "" {
+			bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
+		}
+		
+		// Set the action for the response
+		bookmark.Action = action
+		
+		// Parse timestamp
+		bookmark.Timestamp = timestamp
+		
+		// Extract domain from URL
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host
+		} else {
+			bookmark.Domain = bookmark.URL
+		}
+		
+		// Calculate age
+		bookmark.Age = calculateAge(timestamp)
+		
+		// Generate suggested action
+		bookmark.Suggested = getSuggestedAction(bookmark.Domain, bookmark.Title, bookmark.Description)
+		
+		bookmarks = append(bookmarks, bookmark)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating bookmark rows: %v", err)
 	}
 
 	return &TriageResponse{
@@ -1778,8 +2011,180 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		"id": bookmarkID,
 	})
 	
+	// Fetch and return the updated bookmark
+	updatedBookmark, err := getBookmarkByID(bookmarkID)
+	if err != nil {
+		log.Printf("Failed to fetch updated bookmark: %v", err)
+		logStructured("ERROR", "database", "Failed to fetch updated bookmark", map[string]interface{}{
+			"error": err.Error(),
+			"id":    bookmarkID,
+		})
+		http.Error(w, "Failed to fetch updated bookmark", http.StatusInternalServerError)
+		return
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(updatedBookmark)
+}
+
+func getBookmarkByID(id int) (*ProjectBookmark, error) {
+	// Validate database connection
+	if err := validateDB(); err != nil {
+		return nil, fmt.Errorf("failed to validate database connection: %v", err)
+	}
+
+	var bookmark ProjectBookmark
+	var description, content, action, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
+	
+	err := db.QueryRow(`
+		SELECT id, url, title, description, content, timestamp, action, topic, shareTo, tags, custom_properties
+		FROM bookmarks 
+		WHERE id = ?`, id).Scan(
+		&bookmark.ID,
+		&bookmark.URL,
+		&bookmark.Title,
+		&description,
+		&content,
+		&bookmark.Timestamp,
+		&action,
+		&topic,
+		&shareTo,
+		&tagsJSON,
+		&customPropsJSON,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("bookmark not found")
+		}
+		return nil, fmt.Errorf("failed to query bookmark: %v", err)
+	}
+
+	// Handle nullable fields
+	if description.Valid {
+		bookmark.Description = description.String
+	}
+	if content.Valid {
+		bookmark.Content = content.String
+	}
+	if action.Valid {
+		bookmark.Action = action.String
+	}
+	if topic.Valid {
+		bookmark.Topic = topic.String
+	}
+	if shareTo.Valid {
+		bookmark.ShareTo = shareTo.String
+	}
+
+	// Parse tags and custom properties from JSON
+	if tagsJSON.Valid && tagsJSON.String != "" {
+		bookmark.Tags = tagsFromJSON(tagsJSON.String)
+	}
+	
+	if customPropsJSON.Valid && customPropsJSON.String != "" {
+		bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
+	}
+
+	// Extract domain from URL
+	bookmark.Domain = extractDomain(bookmark.URL)
+	
+	// Calculate age
+	bookmark.Age = calculateAge(bookmark.Timestamp)
+	
+	return &bookmark, nil
+}
+
+func extractDomain(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return "unknown"
+	}
+	return parsed.Hostname()
+}
+
+func calculateAge(timestamp string) string {
+	// Parse the timestamp
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		// Try alternative formats
+		t, err = time.Parse("2006-01-02 15:04:05", timestamp)
+		if err != nil {
+			return "unknown"
+		}
+	}
+	
+	now := time.Now()
+	diff := now.Sub(t)
+	
+	minutes := int(diff.Minutes())
+	hours := int(diff.Hours())
+	days := int(diff.Hours() / 24)
+	weeks := days / 7
+	months := days / 30
+	
+	if minutes < 1 {
+		return "just now"
+	} else if minutes < 60 {
+		return fmt.Sprintf("%dm", minutes)
+	} else if hours < 24 {
+		return fmt.Sprintf("%dh", hours)
+	} else if days < 7 {
+		return fmt.Sprintf("%dd", days)
+	} else if weeks < 4 {
+		return fmt.Sprintf("%dw", weeks)
+	} else {
+		return fmt.Sprintf("%dmo", months)
+	}
+}
+
+// Helper functions for handling JSON fields in database
+func tagsToJSON(tags []string) string {
+	if len(tags) == 0 {
+		return "[]"
+	}
+	jsonBytes, err := json.Marshal(tags)
+	if err != nil {
+		log.Printf("Error marshaling tags: %v", err)
+		return "[]"
+	}
+	return string(jsonBytes)
+}
+
+func tagsFromJSON(jsonStr string) []string {
+	if jsonStr == "" || jsonStr == "[]" {
+		return nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(jsonStr), &tags); err != nil {
+		log.Printf("Error unmarshaling tags: %v", err)
+		return nil
+	}
+	return tags
+}
+
+func customPropsToJSON(props map[string]string) string {
+	if len(props) == 0 {
+		return "{}"
+	}
+	jsonBytes, err := json.Marshal(props)
+	if err != nil {
+		log.Printf("Error marshaling custom properties: %v", err)
+		return "{}"
+	}
+	return string(jsonBytes)
+}
+
+func customPropsFromJSON(jsonStr string) map[string]string {
+	if jsonStr == "" || jsonStr == "{}" {
+		return nil
+	}
+	var props map[string]string
+	if err := json.Unmarshal([]byte(jsonStr), &props); err != nil {
+		log.Printf("Error unmarshaling custom properties: %v", err)
+		return nil
+	}
+	return props
 }
 
 func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
@@ -1834,9 +2239,13 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		topic = ""
 	}
 	
-	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ?, project_id = ? WHERE id = ?`
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
+	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ? WHERE id = ?`
 	
-	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, topic, projectID, id)
+	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, topic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		log.Printf("Failed to update bookmark: %v", err)
 		logStructured("ERROR", "database", "Update failed", map[string]interface{}{
@@ -1937,14 +2346,18 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		}
 	}
 	
+	// Convert tags and custom properties to JSON
+	tagsJSON := tagsToJSON(req.Tags)
+	customPropsJSON := customPropsToJSON(req.CustomProperties)
+
 	// Update bookmark with all fields
 	updateSQL := `
 		UPDATE bookmarks 
-		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?
+		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ?
 		WHERE id = ?`
 	
 	result, err := db.Exec(updateSQL, 
-		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, id)
+		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		logStructured("ERROR", "database", "Failed to execute full bookmark update", map[string]interface{}{
 			"error": err.Error(),
