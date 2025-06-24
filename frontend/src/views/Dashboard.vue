@@ -135,17 +135,40 @@
                 📦 Archive
               </div>
               <div class="section-actions">
+                <AppButton size="sm" variant="secondary" @click="showFilters = !showFilters">
+                  Filter
+                </AppButton>
+                <AppButton size="sm" variant="secondary" @click="showSort = !showSort">
+                  Sort
+                </AppButton>
                 <AppButton size="sm" variant="secondary">
                   Export
                 </AppButton>
               </div>
             </div>
+            
+            <!-- Filter Panel -->
+            <FilterPanel v-if="showFilters" />
+            
+            <!-- Sort Panel -->
+            <SortPanel 
+              v-if="showSort" 
+              :current-sort="currentSort"
+              @sort-change="setSortOrder"
+            />
+            
             <div class="section-content">
               <BookmarkList
                 :bookmarks="filteredBookmarks"
                 :batch-mode="batchMode"
+                :total-count="totalBookmarksForCurrentTab"
+                :show-results-count="hasActiveFilters"
+                :loading="loading"
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
+                @move-to-working="handleMoveToWorking"
+                @move-to-share="handleShareSingle"
+                @archive="(id) => moveBookmarks([id], 'archived')"
               />
             </div>
           </div>
