@@ -112,7 +112,10 @@
               </div>
             </div>
             <div class="section-content">
-              <ProjectList :projects="projectStats" />
+              <ProjectList 
+                :projects="projectStats" 
+                @export-project="handleProjectExport"
+              />
             </div>
           </div>
 
@@ -394,6 +397,21 @@ const handleMoveToProject = async (bookmarkId: string, topic: string) => {
   } catch (error) {
     console.error('Failed to move bookmark to project:', error)
   }
+}
+
+const handleProjectExport = (project: any) => {
+  // Simple CSV export functionality
+  const csvContent = `Project: ${project.topic}\nLinks: ${project.count}\nStatus: ${project.status}\nLast Updated: ${project.lastUpdated}\n\nExported at: ${new Date().toISOString()}`
+  
+  const blob = new Blob([csvContent], { type: 'text/plain' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `project-${project.topic.toLowerCase().replace(/\s+/g, '-')}.txt`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
 }
 
 const handleShareSingle = (bookmarkId: string) => {
