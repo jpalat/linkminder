@@ -8,9 +8,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   const topicField = document.getElementById('topicField');
   const topicInput = document.getElementById('topic');
   const topicSuggestions = document.getElementById('topicSuggestions');
+  const tagsInput = document.getElementById('tagsInput');
+  const tagsDisplay = document.getElementById('tagsDisplay');
+  const propertyKeyInput = document.getElementById('propertyKey');
+  const propertyValueInput = document.getElementById('propertyValue');
+  const addPropertyBtn = document.getElementById('addProperty');
+  const propertiesList = document.getElementById('propertiesList');
   const saveBtn = document.getElementById('saveBtn');
   const saveCloseBtn = document.getElementById('saveCloseBtn');
   const statusDiv = document.getElementById('status');
+  
+  let tags = [];
+  let customProperties = {};
   
   function showStatus(message, isError = false) {
     statusDiv.textContent = message;
@@ -36,6 +45,66 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
   
+  // Tags management functions
+  function renderTags() {
+    tagsDisplay.innerHTML = '';
+    tags.forEach((tag, index) => {
+      const tagElement = document.createElement('div');
+      tagElement.className = 'tag';
+      tagElement.innerHTML = `
+        ${tag}
+        <button class="tag-remove" data-index="${index}">×</button>
+      `;
+      tagsDisplay.appendChild(tagElement);
+    });
+  }
+  
+  function addTag(tagText) {
+    const trimmedTag = tagText.trim();
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      tags.push(trimmedTag);
+      renderTags();
+    }
+  }
+  
+  function removeTag(index) {
+    tags.splice(index, 1);
+    renderTags();
+  }
+  
+  // Custom properties management functions
+  function renderCustomProperties() {
+    propertiesList.innerHTML = '';
+    Object.entries(customProperties).forEach(([key, value]) => {
+      const propertyElement = document.createElement('div');
+      propertyElement.className = 'property-item';
+      propertyElement.innerHTML = `
+        <div class="property-display">
+          <span class="property-key-display">${key}:</span>
+          <span class="property-value-display">${value}</span>
+        </div>
+        <button class="remove-property-btn" data-key="${key}">×</button>
+      `;
+      propertiesList.appendChild(propertyElement);
+    });
+  }
+  
+  function addCustomProperty() {
+    const key = propertyKeyInput.value.trim();
+    const value = propertyValueInput.value.trim();
+    
+    if (key && value) {
+      customProperties[key] = value;
+      propertyKeyInput.value = '';
+      propertyValueInput.value = '';
+      renderCustomProperties();
+    }
+  }
+  
+  function removeCustomProperty(key) {
+    delete customProperties[key];
+    renderCustomProperties();
+  }
   
   // Fetch topics from server
   async function loadTopics() {
@@ -123,6 +192,61 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up event listeners
   actionSelect.addEventListener('change', updateConditionalFields);
   
+  // Tags input event listeners
+  tagsInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const tagText = tagsInput.value.trim();
+      if (tagText) {
+        // Handle comma-separated tags
+        const newTags = tagText.split(',').map(t => t.trim()).filter(t => t);
+        newTags.forEach(tag => addTag(tag));
+        tagsInput.value = '';
+      }
+    }
+  });
+  
+  tagsInput.addEventListener('blur', () => {
+    const tagText = tagsInput.value.trim();
+    if (tagText) {
+      addTag(tagText);
+      tagsInput.value = '';
+    }
+  });
+  
+  // Tag removal event listener (using event delegation)
+  tagsDisplay.addEventListener('click', (e) => {
+    if (e.target.classList.contains('tag-remove')) {
+      const index = parseInt(e.target.dataset.index);
+      removeTag(index);
+    }
+  });
+  
+  // Custom properties event listeners
+  addPropertyBtn.addEventListener('click', addCustomProperty);
+  
+  propertyKeyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      propertyValueInput.focus();
+    }
+  });
+  
+  propertyValueInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCustomProperty();
+    }
+  });
+  
+  // Property removal event listener (using event delegation)
+  propertiesList.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-property-btn')) {
+      const key = e.target.dataset.key;
+      removeCustomProperty(key);
+    }
+  });
+  
   // Initial update of conditional fields
   updateConditionalFields();
   
@@ -189,7 +313,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         content: pageData.content || '',
         action,
         shareTo: action === 'share' ? shareTo : '',
-        topic: action === 'working' ? topic : ''
+        topic: action === 'working' ? topic : '',
+        tags: tags,
+        customProperties: customProperties
       };
       
       const response = await chrome.runtime.sendMessage({
