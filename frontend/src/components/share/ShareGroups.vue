@@ -111,6 +111,7 @@ import { ref } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import type { ShareGroup, Bookmark } from '@/types'
 import AppButton from '@/components/ui/AppButton.vue'
+import { useNotifications } from '@/composables/useNotifications'
 
 interface Props {
   groups: ShareGroup[]
@@ -126,46 +127,58 @@ const emit = defineEmits<{
   'share-item': [item: Bookmark]
 }>()
 
-// Copy functionality
-const { copy } = useClipboard()
+// Copy functionality - use fallback method that works reliably
+const { success, error } = useNotifications()
+
+// Reliable clipboard copy function using fallback method
+const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    // Try modern Clipboard API first (if available and secure)
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+    
+    // Fallback method using temporary textarea (works in more environments)
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-999999px'
+    textarea.style.top = '-999999px'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    
+    // Select and copy
+    textarea.focus()
+    textarea.select()
+    textarea.setSelectionRange(0, 99999) // For mobile devices
+    
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    
+    return successful
+  } catch (err) {
+    console.error('Copy failed:', err)
+    return false
+  }
+}
 const previewItemId = ref<string | null>(null)
 const previewFormat = ref('markdown')
 
 // Format definitions
 const itemFormats = [
+  { key: 'rich-text', label: 'Rich Text', icon: '📄' },
   { key: 'markdown', label: 'Markdown', icon: '📝' },
-  { key: 'email', label: 'Email', icon: '📧' },
-  { key: 'slack', label: 'Slack', icon: '💬' }
+  { key: 'plain', label: 'Plain Text', icon: '📃' }
 ]
 
 // Group-specific format options
 const getGroupFormats = (destination: string) => {
-  const baseFormats = [
+  return [
+    { key: 'rich-text', label: 'Rich Text', icon: '📄' },
     { key: 'markdown', label: 'Markdown', icon: '📝' },
-    { key: 'email', label: 'Email Format', icon: '📧' },
-    { key: 'plain', label: 'Plain Text', icon: '📄' },
-    { key: 'slack', label: 'Slack', icon: '💬' }
+    { key: 'plain', label: 'Plain Text', icon: '📃' }
   ]
-  
-  if (destination === 'Team Slack') {
-    return [
-      { key: 'slack', label: 'Slack Format', icon: '💬' },
-      { key: 'markdown', label: 'Markdown', icon: '📝' },
-      { key: 'email', label: 'Email', icon: '📧' },
-      { key: 'plain', label: 'Plain Text', icon: '📄' }
-    ]
-  }
-  
-  if (destination === 'Newsletter') {
-    return [
-      { key: 'email', label: 'Email Format', icon: '📧' },
-      { key: 'markdown', label: 'Markdown', icon: '📝' },
-      { key: 'plain', label: 'Plain Text', icon: '📄' },
-      { key: 'slack', label: 'Slack', icon: '💬' }
-    ]
-  }
-  
-  return baseFormats
 }
 
 const getShareButtonText = (destination: string): string => {
@@ -193,6 +206,11 @@ const formatGroupContent = (group: ShareGroup, format: string): string => {
   const { destination, items } = group
   
   switch (format) {
+    case 'rich-text':
+      return `${destination}\n\n${items.map(item => 
+        `${item.title}\n${item.url}${item.description ? `\n\n${item.description}` : ''}\n`
+      ).join('\n')}`
+    
     case 'markdown':
       return `# ${destination}\n\n${items.map(item => 
         `- [${item.title}](${item.url})${item.description ? ` - ${item.description}` : ''}`
@@ -218,13 +236,17 @@ const formatGroupContent = (group: ShareGroup, format: string): string => {
 
 const formatItemContent = (item: Bookmark, format: string): string => {
   switch (format) {
+    case 'rich-text':
+      // Rich text format suitable for pasting into rich text editors
+      return `${item.title}\n${item.url}${item.description ? `\n\n${item.description}` : ''}`
     case 'markdown':
       return `[${item.title}](${item.url})${item.description ? ` - ${item.description}` : ''}`
+    case 'plain':
+      return `${item.title}\n${item.url}${item.description ? `\n${item.description}` : ''}`
     case 'email':
       return `${item.title}\n${item.url}${item.description ? `\n${item.description}` : ''}`
     case 'slack':
       return `<${item.url}|${item.title}>${item.description ? ` - ${item.description}` : ''}`
-    case 'plain':
     default:
       return `${item.title}\n${item.url}${item.description ? `\n${item.description}` : ''}`
   }
@@ -252,15 +274,51 @@ const shareItem = (item: Bookmark) => {
 }
 
 const copyGroupItems = async (group: ShareGroup, format: string) => {
-  const content = formatGroupContent(group, format)
-  await copy(content)
-  console.log(`Copied ${group.destination} items as ${format}`)
+  try {
+    const content = formatGroupContent(group, format)
+    console.log('Copying group content:', content) // Debug log
+    
+    const successful = await copyToClipboard(content)
+    
+    if (successful) {
+      success(`Copied ${group.items.length} items as ${format} format`, {
+        title: `${group.destination} Copied`
+      })
+    } else {
+      error('Failed to copy to clipboard. Please try again.', {
+        title: 'Copy Failed'
+      })
+    }
+  } catch (err) {
+    console.error('Failed to copy group items:', err)
+    error('Failed to copy to clipboard. Please try again.', {
+      title: 'Copy Failed'
+    })
+  }
 }
 
 const copyItemFormat = async (item: Bookmark, format: string) => {
-  const content = formatItemContent(item, format)
-  await copy(content)
-  console.log(`Copied "${item.title}" as ${format}`)
+  try {
+    const content = formatItemContent(item, format)
+    console.log('Copying item content:', content) // Debug log
+    
+    const successful = await copyToClipboard(content)
+    
+    if (successful) {
+      success(`Copied "${item.title}" as ${format} format`, {
+        title: 'Bookmark Copied'
+      })
+    } else {
+      error('Failed to copy to clipboard. Please try again.', {
+        title: 'Copy Failed'
+      })
+    }
+  } catch (err) {
+    console.error('Failed to copy item:', err)
+    error('Failed to copy to clipboard. Please try again.', {
+      title: 'Copy Failed'
+    })
+  }
 }
 
 const showItemPreview = (item: Bookmark) => {
