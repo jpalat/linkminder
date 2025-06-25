@@ -750,6 +750,38 @@ func TestGetStatsSummary(t *testing.T) {
 		if len(stats.ProjectStats) == 0 {
 			t.Error("Expected project stats, got none")
 		}
+		
+		// Test the new latest resource functionality
+		for _, project := range stats.ProjectStats {
+			if project.LatestURL == "" {
+				t.Errorf("Expected latestURL for project %s, got empty string", project.Topic)
+			}
+			if project.LatestTitle == "" {
+				t.Errorf("Expected latestTitle for project %s, got empty string", project.Topic)
+			}
+			
+			// Validate specific projects based on test data
+			switch project.Topic {
+			case "Programming":
+				if project.Count != 2 {
+					t.Errorf("Expected Programming project to have 2 bookmarks, got %d", project.Count)
+				}
+				// Should contain the latest bookmark (either Example 2 or Example 5)
+				if project.LatestURL != "https://example.com/2" && project.LatestURL != "https://example.com/5" {
+					t.Errorf("Expected Programming project latest URL to be from test data, got %s", project.LatestURL)
+				}
+			case "Development":
+				if project.Count != 1 {
+					t.Errorf("Expected Development project to have 1 bookmark, got %d", project.Count)
+				}
+				if project.LatestURL != "https://example.com/4" {
+					t.Errorf("Expected Development project latest URL to be https://example.com/4, got %s", project.LatestURL)
+				}
+				if project.LatestTitle != "Example 4" {
+					t.Errorf("Expected Development project latest title to be 'Example 4', got %s", project.LatestTitle)
+				}
+			}
+		}
 	})
 }
 
@@ -936,6 +968,20 @@ func TestHandleStatsSummary_Success(t *testing.T) {
 		
 		if stats.ActiveProjects != 2 {
 			t.Errorf("Expected 2 active projects, got %d", stats.ActiveProjects)
+		}
+		
+		// Test the new latest resource functionality in HTTP response
+		if len(stats.ProjectStats) == 0 {
+			t.Error("Expected project stats in HTTP response, got none")
+		}
+		
+		for _, project := range stats.ProjectStats {
+			if project.LatestURL == "" {
+				t.Errorf("Expected latestURL for project %s in HTTP response, got empty string", project.Topic)
+			}
+			if project.LatestTitle == "" {
+				t.Errorf("Expected latestTitle for project %s in HTTP response, got empty string", project.Topic)
+			}
 		}
 	})
 }

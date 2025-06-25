@@ -65,6 +65,8 @@ export interface ProjectStat {
   count: number
   lastUpdated: string
   status: 'active' | 'stale' | 'inactive'
+  latestURL?: string
+  latestTitle?: string
 }
 
 export type TabType = 'triage' | 'projects' | 'share' | 'archive'
