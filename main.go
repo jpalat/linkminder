@@ -80,6 +80,8 @@ type ProjectStat struct {
 	Count       int    `json:"count"`
 	LastUpdated string `json:"lastUpdated"`
 	Status      string `json:"status"`
+	LatestURL   string `json:"latestURL"`
+	LatestTitle string `json:"latestTitle"`
 }
 
 type SummaryStats struct {
@@ -844,13 +846,30 @@ func getStatsSummary() (*SummaryStats, error) {
 func getProjectStats() ([]ProjectStat, error) {
 	querySQL := `
 		SELECT 
-			topic,
-			COUNT(*) as count,
-			MAX(timestamp) as lastUpdated
-		FROM bookmarks 
-		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
-		GROUP BY topic
-		ORDER BY MAX(timestamp) DESC
+			stats.topic,
+			stats.count,
+			stats.lastUpdated,
+			latest.url as latestURL,
+			latest.title as latestTitle
+		FROM (
+			SELECT 
+				topic,
+				COUNT(*) as count,
+				MAX(timestamp) as lastUpdated
+			FROM bookmarks 
+			WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+			GROUP BY topic
+		) stats
+		LEFT JOIN bookmarks latest ON stats.topic = latest.topic 
+			AND latest.timestamp = stats.lastUpdated
+			AND latest.action = 'working'
+			AND latest.id = (
+				SELECT MAX(id) FROM bookmarks b 
+				WHERE b.topic = stats.topic 
+				AND b.timestamp = stats.lastUpdated 
+				AND b.action = 'working'
+			)
+		ORDER BY stats.lastUpdated DESC
 		LIMIT 10
 	`
 	
@@ -865,7 +884,7 @@ func getProjectStats() ([]ProjectStat, error) {
 		var project ProjectStat
 		var lastUpdated string
 		
-		err := rows.Scan(&project.Topic, &project.Count, &lastUpdated)
+		err := rows.Scan(&project.Topic, &project.Count, &lastUpdated, &project.LatestURL, &project.LatestTitle)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project stat: %v", err)
 		}

@@ -82,8 +82,8 @@
           <div class="bookmark-item">
             <div class="bookmark-favicon">📖</div>
             <div class="bookmark-content">
-              <div class="bookmark-title">{{ getSampleBookmarkTitle(project.topic) }}</div>
-              <div class="bookmark-domain">{{ getSampleDomain(project.topic) }}</div>
+              <div class="bookmark-title">{{ project.latestTitle || getSampleBookmarkTitle(project.topic) }}</div>
+              <div class="bookmark-domain">{{ getActualDomain(project) }}</div>
               <div class="bookmark-tags">
                 <span class="bookmark-tag">{{ project.status }}</span>
                 <span class="bookmark-tag">{{ project.topic.toLowerCase() }}</span>
@@ -221,6 +221,21 @@ const getSampleDomain = (topic: string): string => {
   
   const key = Object.keys(domains).find(k => topic.includes(k))
   return key ? domains[key] : 'docs.example.com'
+}
+
+const getActualDomain = (project: ProjectStat): string => {
+  // Use real URL if available
+  if (project.latestURL) {
+    try {
+      const url = new URL(project.latestURL)
+      return url.hostname
+    } catch (e) {
+      // Fallback to sample domain if URL parsing fails
+      return getSampleDomain(project.topic)
+    }
+  }
+  // Fallback to sample domain if no URL available
+  return getSampleDomain(project.topic)
 }
 
 const formatDate = (dateString: string) => {
