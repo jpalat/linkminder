@@ -1607,7 +1607,7 @@ func TestProjects_TopicCaseHandling(t *testing.T) {
 // Projects HTTP Handler Tests
 
 func TestHandleProjects_InvalidMethods(t *testing.T) {
-	methods := []string{"POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+	methods := []string{"PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
 	
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
@@ -1894,13 +1894,17 @@ func TestBookmarkUpdate(t *testing.T) {
 			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
 		}
 		
-		var response map[string]string
+		var response ProjectBookmark
 		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 		
-		if response["status"] != "success" {
-			t.Errorf("Expected status 'success', got %s", response["status"])
+		if response.ID != int(bookmarkID) {
+			t.Errorf("Expected ID %d, got %d", bookmarkID, response.ID)
+		}
+		
+		if response.Action != "archived" {
+			t.Errorf("Expected action 'archived', got %s", response.Action)
 		}
 		
 		// Verify bookmark was actually updated in database
@@ -1994,13 +1998,21 @@ func TestBookmarkFullUpdate_PUT(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	var response map[string]string
+	var response ProjectBookmark
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if response["status"] != "success" {
-		t.Errorf("Expected success status, got %s", response["status"])
+	if response.ID != int(bookmarkID) {
+		t.Errorf("Expected ID %d, got %d", bookmarkID, response.ID)
+	}
+	
+	if response.Title != "Updated Title" {
+		t.Errorf("Expected title 'Updated Title', got %s", response.Title)
+	}
+	
+	if response.Action != "working" {
+		t.Errorf("Expected action 'working', got %s", response.Action)
 	}
 
 	// Verify the bookmark was updated in database
