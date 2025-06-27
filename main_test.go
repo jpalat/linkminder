@@ -3821,3 +3821,527 @@ func TestBookmarkUpdate_ResponseFormat(t *testing.T) {
 		})
 	})
 }
+
+// ============ CORS MIDDLEWARE TESTS ============
+
+func TestCORSMiddleware_Behavior(t *testing.T) {
+	t.Run("Should add CORS headers to responses", func(t *testing.T) {
+		// Create a simple handler that returns 200 OK
+		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("test response"))
+		})
+		
+		// Wrap with CORS middleware
+		wrappedHandler := corsMiddleware(testHandler)
+		
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Origin", "https://example.com")
+		rr := httptest.NewRecorder()
+		
+		wrappedHandler.ServeHTTP(rr, req)
+		
+		// Check that CORS headers are present
+		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Errorf("Expected Access-Control-Allow-Origin '*', got %s", rr.Header().Get("Access-Control-Allow-Origin"))
+		}
+		
+		if rr.Header().Get("Access-Control-Allow-Methods") == "" {
+			t.Error("Expected Access-Control-Allow-Methods header to be set")
+		}
+		
+		if rr.Header().Get("Access-Control-Allow-Headers") == "" {
+			t.Error("Expected Access-Control-Allow-Headers header to be set")
+		}
+		
+		// Original response should be preserved
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+		
+		if rr.Body.String() != "test response" {
+			t.Errorf("Expected body 'test response', got %s", rr.Body.String())
+		}
+	})
+	
+	t.Run("Should handle preflight OPTIONS requests", func(t *testing.T) {
+		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// This should not be called for OPTIONS requests
+			t.Error("Handler should not be called for OPTIONS requests")
+		})
+		
+		wrappedHandler := corsMiddleware(testHandler)
+		
+		req := httptest.NewRequest("OPTIONS", "/test", nil)
+		req.Header.Set("Origin", "https://example.com")
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		rr := httptest.NewRecorder()
+		
+		wrappedHandler.ServeHTTP(rr, req)
+		
+		// Should return 200 OK for preflight
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200 for OPTIONS, got %d", rr.Code)
+		}
+		
+		// Should have CORS headers
+		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Error("Expected CORS headers on OPTIONS response")
+		}
+	})
+	
+	t.Run("Should preserve error responses with CORS headers", func(t *testing.T) {
+		errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("error message"))
+		})
+		
+		wrappedHandler := corsMiddleware(errorHandler)
+		
+		req := httptest.NewRequest("POST", "/test", nil)
+		rr := httptest.NewRecorder()
+		
+		wrappedHandler.ServeHTTP(rr, req)
+		
+		// Error status should be preserved
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", rr.Code)
+		}
+		
+		// But CORS headers should still be added
+		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Error("Expected CORS headers even on error responses")
+		}
+		
+		// Error message should be preserved
+		if rr.Body.String() != "error message" {
+			t.Errorf("Expected error message preserved, got %s", rr.Body.String())
+		}
+	})
+}
+
+// ============ BOOKMARK FILTERING BY ACTION TESTS ============
+
+func TestGetBookmarksByAction_Behavior(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert bookmarks with different actions
+		testBookmarks := []struct {
+			url, title, action string
+		}{
+			{"https://work1.com", "Work Item 1", "working"},
+			{"https://work2.com", "Work Item 2", "working"},
+			{"https://share1.com", "Share Item 1", "share"},
+			{"https://share2.com", "Share Item 2", "share"},
+			{"https://archive1.com", "Archive Item 1", "archived"},
+			{"https://read1.com", "Read Item 1", "read-later"},
+			{"https://read2.com", "Read Item 2", ""},
+			{"https://irrelevant1.com", "Irrelevant Item", "irrelevant"},
+		}
+		
+		for i, bookmark := range testBookmarks {
+			_, err := tdb.db.Exec(`INSERT INTO bookmarks (url, title, action, timestamp) VALUES (?, ?, ?, ?)`,
+				bookmark.url, bookmark.title, bookmark.action, fmt.Sprintf("2023-12-0%d 10:00:00", i+1))
+			if err != nil {
+				t.Fatalf("Failed to insert test bookmark %d: %v", i, err)
+			}
+		}
+		
+		t.Run("Should filter working bookmarks", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=working", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			if len(response.Bookmarks) != 2 {
+				t.Errorf("Expected 2 working bookmarks, got %d", len(response.Bookmarks))
+			}
+			
+			for _, bookmark := range response.Bookmarks {
+				if bookmark.Action != "working" {
+					t.Errorf("Expected action 'working', got %s", bookmark.Action)
+				}
+			}
+		})
+		
+		t.Run("Should filter share bookmarks", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			if len(response.Bookmarks) != 2 {
+				t.Errorf("Expected 2 share bookmarks, got %d", len(response.Bookmarks))
+			}
+			
+			for _, bookmark := range response.Bookmarks {
+				if bookmark.Action != "share" {
+					t.Errorf("Expected action 'share', got %s", bookmark.Action)
+				}
+			}
+		})
+		
+		t.Run("Should filter read-later bookmarks", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=read-later", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should filter only explicit "read-later" actions
+			if len(response.Bookmarks) != 1 {
+				t.Errorf("Expected 1 read-later bookmark, got %d", len(response.Bookmarks))
+			}
+			
+			for _, bookmark := range response.Bookmarks {
+				if bookmark.Action != "read-later" {
+					t.Errorf("Expected action 'read-later', got %s", bookmark.Action)
+				}
+			}
+		})
+		
+		t.Run("Should return share bookmarks when no action filter specified", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// API defaults to share action when no filter is provided
+			if len(response.Bookmarks) != 2 {
+				t.Errorf("Expected 2 share bookmarks (default behavior), got %d", len(response.Bookmarks))
+			}
+		})
+		
+		t.Run("Should handle invalid action gracefully", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=invalid-action", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200 for invalid action, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should return empty array for invalid action
+			if len(response.Bookmarks) != 0 {
+				t.Errorf("Expected 0 bookmarks for invalid action, got %d", len(response.Bookmarks))
+			}
+		})
+	})
+}
+
+// ============ DOMAIN EXTRACTION AND AGE CALCULATION TESTS ============
+
+func TestExtractDomain_EdgeCases(t *testing.T) {
+	testCases := []struct {
+		url      string
+		expected string
+		desc     string
+	}{
+		{"https://example.com", "example.com", "basic HTTPS URL"},
+		{"http://example.com", "example.com", "basic HTTP URL"},
+		{"https://www.example.com", "www.example.com", "with www subdomain"},
+		{"https://api.example.com/v1/users", "api.example.com", "with subdomain and path"},
+		{"https://example.com:8080", "example.com", "with port number"},
+		{"https://example.com:8080/path?query=1", "example.com", "with port, path, and query"},
+		{"ftp://files.example.com", "files.example.com", "FTP protocol"},
+		{"invalid-url", "", "invalid URL returns empty"},
+		{"", "", "empty URL"},
+		{"https://", "", "incomplete URL returns empty"},
+		{"example.com", "", "URL without protocol returns empty"},
+		{"https://user:pass@example.com", "example.com", "URL with authentication"},
+		{"https://192.168.1.1", "192.168.1.1", "IP address URL"},
+		{"https://[::1]:8080", "::1", "IPv6 URL with port"},
+		{"https://localhost:3000", "localhost", "localhost with port"},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			result := extractDomain(tc.url)
+			if result != tc.expected {
+				t.Errorf("extractDomain(%q) = %q, expected %q", tc.url, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCalculateAge_Behavior(t *testing.T) {
+	now := time.Now().UTC()
+	
+	testCases := []struct {
+		timestamp string
+		desc      string
+		checkFunc func(age string) bool
+	}{
+		{
+			timestamp: now.Format("2006-01-02 15:04:05"),
+			desc:      "current time",
+			checkFunc: func(age string) bool { return age == "just now" },
+		},
+		{
+			timestamp: now.Add(-30 * time.Second).Format("2006-01-02 15:04:05"),
+			desc:      "30 seconds ago",
+			checkFunc: func(age string) bool { return age == "just now" },
+		},
+		{
+			timestamp: now.Add(-2 * time.Minute).Format("2006-01-02 15:04:05"),
+			desc:      "2 minutes ago",
+			checkFunc: func(age string) bool { return age == "2m" },
+		},
+		{
+			timestamp: now.Add(-90 * time.Minute).Format("2006-01-02 15:04:05"),
+			desc:      "90 minutes ago",
+			checkFunc: func(age string) bool { return age == "1h" },
+		},
+		{
+			timestamp: now.Add(-25 * time.Hour).Format("2006-01-02 15:04:05"),
+			desc:      "25 hours ago",
+			checkFunc: func(age string) bool { return age == "1d" },
+		},
+		{
+			timestamp: now.Add(-8 * 24 * time.Hour).Format("2006-01-02 15:04:05"),
+			desc:      "8 days ago",
+			checkFunc: func(age string) bool { return age == "1w" },
+		},
+		{
+			timestamp: now.Add(-35 * 24 * time.Hour).Format("2006-01-02 15:04:05"),
+			desc:      "35 days ago",
+			checkFunc: func(age string) bool { return age == "1mo" },
+		},
+		{
+			timestamp: now.Add(-400 * 24 * time.Hour).Format("2006-01-02 15:04:05"),
+			desc:      "400 days ago",
+			checkFunc: func(age string) bool { return strings.HasSuffix(age, "mo") },
+		},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			age := calculateAge(tc.timestamp)
+			if !tc.checkFunc(age) {
+				t.Errorf("calculateAge(%q) = %q, but validation failed", tc.timestamp, age)
+			}
+		})
+	}
+	
+	t.Run("should handle invalid timestamp format", func(t *testing.T) {
+		age := calculateAge("invalid-timestamp")
+		if age != "unknown" {
+			t.Errorf("Expected 'unknown' for invalid timestamp, got %q", age)
+		}
+	})
+	
+	t.Run("should handle empty timestamp", func(t *testing.T) {
+		age := calculateAge("")
+		if age != "unknown" {
+			t.Errorf("Expected 'unknown' for empty timestamp, got %q", age)
+		}
+	})
+	
+	t.Run("should handle future timestamp", func(t *testing.T) {
+		future := now.Add(1 * time.Hour).Format("2006-01-02 15:04:05")
+		age := calculateAge(future)
+		if age != "just now" {
+			t.Errorf("Expected 'just now' for future timestamp, got %q", age)
+		}
+	})
+}
+
+// ============ PROJECT SETTINGS ENDPOINT TESTS ============
+
+func TestProjectSettings_Behavior(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a test project
+		result, err := tdb.db.Exec("INSERT INTO projects (name, description, status) VALUES (?, ?, ?)",
+			"Settings Test Project", "Test Description", "active")
+		if err != nil {
+			t.Fatalf("Failed to create test project: %v", err)
+		}
+		
+		projectID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("Failed to get project ID: %v", err)
+		}
+		
+		t.Run("GET should return project settings", func(t *testing.T) {
+			req := httptest.NewRequest("GET", fmt.Sprintf("/api/projects/%d", projectID), nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+			}
+			
+			var project Project
+			err := json.Unmarshal(rr.Body.Bytes(), &project)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal project response: %v", err)
+			}
+			
+			if project.Name != "Settings Test Project" {
+				t.Errorf("Expected name 'Settings Test Project', got %s", project.Name)
+			}
+			
+			if project.Description != "Test Description" {
+				t.Errorf("Expected description 'Test Description', got %s", project.Description)
+			}
+			
+			if project.Status != "active" {
+				t.Errorf("Expected status 'active', got %s", project.Status)
+			}
+		})
+		
+		t.Run("PUT should update project settings", func(t *testing.T) {
+			updateData := struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Status      string `json:"status"`
+			}{
+				Name:        "Updated Settings Project",
+				Description: "Updated Description",
+				Status:      "inactive",
+			}
+			
+			jsonData, _ := json.Marshal(updateData)
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/projects/%d", projectID), bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+			}
+			
+			// Verify the update persisted
+			var name, description, status string
+			err = tdb.db.QueryRow("SELECT name, description, status FROM projects WHERE id = ?", projectID).
+				Scan(&name, &description, &status)
+			if err != nil {
+				t.Fatalf("Failed to query updated project: %v", err)
+			}
+			
+			if name != "Updated Settings Project" {
+				t.Errorf("Expected updated name, got %s", name)
+			}
+			
+			if description != "Updated Description" {
+				t.Errorf("Expected updated description, got %s", description)
+			}
+			
+			if status != "inactive" {
+				t.Errorf("Expected updated status, got %s", status)
+			}
+		})
+		
+		t.Run("DELETE should remove project", func(t *testing.T) {
+			req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/projects/%d", projectID), nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusNoContent {
+				t.Errorf("Expected status 204, got %d. Body: %s", rr.Code, rr.Body.String())
+			}
+			
+			// Verify the project was deleted
+			var count int
+			err = tdb.db.QueryRow("SELECT COUNT(*) FROM projects WHERE id = ?", projectID).Scan(&count)
+			if err != nil {
+				t.Fatalf("Failed to count projects: %v", err)
+			}
+			
+			if count != 0 {
+				t.Errorf("Expected project to be deleted, but still found %d records", count)
+			}
+		})
+		
+		t.Run("Should handle non-existent project ID", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/projects/99999", nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusNotFound {
+				t.Errorf("Expected status 404 for non-existent project, got %d", rr.Code)
+			}
+		})
+		
+		t.Run("Should handle invalid project ID format", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/projects/invalid", nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusNotFound {
+				t.Errorf("Expected status 404 for invalid project ID, got %d", rr.Code)
+			}
+		})
+		
+		t.Run("Should reject unsupported HTTP methods", func(t *testing.T) {
+			req := httptest.NewRequest("PATCH", "/api/projects/1", nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectSettings(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Expected status 405 for unsupported method, got %d", rr.Code)
+			}
+		})
+	})
+}
