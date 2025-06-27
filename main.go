@@ -197,7 +197,12 @@ func logStructured(level, component, message string, data map[string]interface{}
 		return
 	}
 	
-	logFile.WriteString(string(jsonData) + "\n")
+	// Only write to log file if it's initialized (not nil)
+	if logFile != nil {
+		if _, err := logFile.WriteString(string(jsonData) + "\n"); err != nil {
+			log.Printf("Failed to write to log file: %v", err)
+		}
+	}
 }
 
 func initDatabase() error {
@@ -293,9 +298,21 @@ func main() {
 	if err := initLogging(); err != nil {
 		log.Fatalf("Failed to initialize logging: %v", err)
 	}
-	defer logFile.Close()
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			log.Printf("Failed to close log file: %v", err)
+		}
+	}()
 	
 	logStructured("INFO", "startup", "BookMinder API starting up", nil)
+	
+	// Initialize CORS configuration
+	corsConfig = initCORSConfig()
+	log.Printf("CORS configuration initialized")
+	
+	// Initialize security headers configuration  
+	securityConfig = initSecurityConfig()
+	log.Printf("Security headers configuration initialized")
 	
 	// Initialize database
 	if err := initDatabase(); err != nil {
@@ -304,7 +321,11 @@ func main() {
 		})
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Failed to close database: %v", err)
+		}
+	}()
 	
 	log.Printf("Registering HTTP handlers")
 	logStructured("INFO", "startup", "Registering HTTP handlers", nil)
@@ -360,17 +381,167 @@ func main() {
 }
 
 // CORSMiddleware adds CORS headers to all responses
+// CORS configuration
+type CORSConfig struct {
+	AllowedOrigins []string
+	AllowedMethods []string
+	AllowedHeaders []string
+	MaxAge         string
+	AllowWildcard  bool // Emergency development override
+}
+
+// SecurityHeaders configuration for HTTP security headers
+type SecurityConfig struct {
+	ContentSecurityPolicy string
+	XFrameOptions         string
+	XContentTypeOptions   string
+	ReferrerPolicy        string
+	PermissionsPolicy     string
+	HSTSMaxAge            string
+	EnableHSTS            bool
+}
+
+var corsConfig CORSConfig
+var securityConfig SecurityConfig
+
+func initCORSConfig() CORSConfig {
+	// Load from environment with sensible defaults
+	allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+	var origins []string
+	
+	if allowedOriginsEnv != "" {
+		origins = strings.Split(allowedOriginsEnv, ",")
+		for i, origin := range origins {
+			origins[i] = strings.TrimSpace(origin)
+		}
+		log.Printf("CORS origins loaded from environment: %v", origins)
+	} else {
+		// Development defaults
+		origins = []string{
+			"http://localhost:3000",
+			"http://localhost:8080", 
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:8080",
+		}
+		log.Printf("CORS using development defaults: %v", origins)
+	}
+	
+	// Emergency wildcard override (development only)
+	allowWildcard := os.Getenv("CORS_ALLOW_WILDCARD") == "true"
+	if allowWildcard {
+		log.Printf("WARNING: CORS wildcard enabled - NOT FOR PRODUCTION!")
+	}
+	
+	return CORSConfig{
+		AllowedOrigins: origins,
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization", "X-Requested-With", "X-API-Key"},
+		MaxAge:         "86400", // 24 hours
+		AllowWildcard:  allowWildcard,
+	}
+}
+
+func (c *CORSConfig) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return true // Same-origin requests
+	}
+	
+	// Emergency wildcard override (development only)
+	if c.AllowWildcard {
+		return true
+	}
+	
+	// Check exact matches
+	for _, allowed := range c.AllowedOrigins {
+		if origin == allowed {
+			return true
+		}
+	}
+	
+	return false
+}
+
+func initSecurityConfig() SecurityConfig {
+	// Load security headers from environment with secure defaults
+	csp := os.Getenv("CSP_POLICY")
+	if csp == "" {
+		// Secure default CSP - restrictive but functional
+		csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+	}
+	
+	hstsMaxAge := os.Getenv("HSTS_MAX_AGE")
+	if hstsMaxAge == "" {
+		hstsMaxAge = "31536000" // 1 year
+	}
+	
+	enableHSTS := os.Getenv("ENABLE_HSTS") != "false" // Default to enabled
+	
+	return SecurityConfig{
+		ContentSecurityPolicy: csp,
+		XFrameOptions:         "DENY",
+		XContentTypeOptions:   "nosniff",
+		ReferrerPolicy:        "strict-origin-when-cross-origin",
+		PermissionsPolicy:     "geolocation=(), microphone=(), camera=()",
+		HSTSMaxAge:            hstsMaxAge,
+		EnableHSTS:            enableHSTS,
+	}
+}
+
+func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Set security headers
+		w.Header().Set("Content-Security-Policy", securityConfig.ContentSecurityPolicy)
+		w.Header().Set("X-Frame-Options", securityConfig.XFrameOptions)
+		w.Header().Set("X-Content-Type-Options", securityConfig.XContentTypeOptions)
+		w.Header().Set("Referrer-Policy", securityConfig.ReferrerPolicy)
+		w.Header().Set("Permissions-Policy", securityConfig.PermissionsPolicy)
+		
+		// Only set HSTS for HTTPS requests
+		if securityConfig.EnableHSTS && r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", fmt.Sprintf("max-age=%s; includeSubDomains", securityConfig.HSTSMaxAge))
+		}
+		
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	}
+}
+
 func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-		w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
+		origin := r.Header.Get("Origin")
+		
+		// Set CORS headers only for allowed origins
+		if corsConfig.isOriginAllowed(origin) {
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", strings.Join(corsConfig.AllowedMethods, ", "))
+			w.Header().Set("Access-Control-Allow-Headers", strings.Join(corsConfig.AllowedHeaders, ", "))
+			w.Header().Set("Access-Control-Max-Age", corsConfig.MaxAge)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		// Handle preflight OPTIONS requests
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			if corsConfig.isOriginAllowed(origin) {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				log.Printf("CORS: Blocked OPTIONS request from unauthorized origin: %s", origin)
+				w.WriteHeader(http.StatusForbidden)
+			}
+			return
+		}
+
+		// For non-OPTIONS requests, check origin if present
+		if origin != "" && !corsConfig.isOriginAllowed(origin) {
+			log.Printf("CORS: Blocked request from unauthorized origin: %s", origin)
+			logStructured("WARN", "security", "CORS blocked unauthorized origin", map[string]interface{}{
+				"origin":     origin,
+				"method":     r.Method,
+				"path":       r.URL.Path,
+				"user_agent": r.UserAgent(),
+			})
+			http.Error(w, "Origin not allowed", http.StatusForbidden)
 			return
 		}
 
@@ -379,9 +550,9 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// Helper function to wrap handlers with CORS
+// Helper function to wrap handlers with security headers and CORS
 func withCORS(handler http.HandlerFunc) http.HandlerFunc {
-	return corsMiddleware(handler)
+	return securityHeadersMiddleware(corsMiddleware(handler))
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -419,7 +590,11 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(dashboardHTML)
+	if _, err := w.Write(dashboardHTML); err != nil {
+		log.Printf("Failed to write dashboard HTML: %v", err)
+		http.Error(w, "Failed to serve dashboard", http.StatusInternalServerError)
+		return
+	}
 	
 	logStructured("INFO", "api", "Dashboard served successfully", nil)
 }
@@ -459,7 +634,11 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(projectsHTML)
+	if _, err := w.Write(projectsHTML); err != nil {
+		log.Printf("Failed to write projects HTML: %v", err)
+		http.Error(w, "Failed to serve projects page", http.StatusInternalServerError)
+		return
+	}
 	
 	logStructured("INFO", "api", "Projects page served successfully", nil)
 }
@@ -495,7 +674,11 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(projectDetailHTML)
+	if _, err := w.Write(projectDetailHTML); err != nil {
+		log.Printf("Failed to write project detail HTML: %v", err)
+		http.Error(w, "Failed to serve project detail page", http.StatusInternalServerError)
+		return
+	}
 	
 	logStructured("INFO", "api", "Project detail page served successfully", nil)
 }
@@ -574,7 +757,9 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to fetch created bookmark ID: %v", err)
 		// Still return success since the bookmark was saved
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "success"}); err != nil {
+			log.Printf("Failed to encode success response: %v", err)
+		}
 		return
 	}
 	
@@ -584,12 +769,17 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to fetch created bookmark: %v", err)
 		// Still return success since the bookmark was saved
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "success"}); err != nil {
+			log.Printf("Failed to encode success response: %v", err)
+		}
 		return
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(createdBookmark)
+	if err := json.NewEncoder(w).Encode(createdBookmark); err != nil {
+		log.Printf("Failed to encode bookmark response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 func handleTopics(w http.ResponseWriter, r *http.Request) {
@@ -697,7 +887,11 @@ func getTopicsFromDB() ([]string, error) {
 		})
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 	
 	var topics []string
 	for rows.Next() {
@@ -877,7 +1071,11 @@ func getProjectStats() ([]ProjectStat, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project stats: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 	
 	var projects []ProjectStat
 	for rows.Next() {
@@ -1078,7 +1276,11 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query triage bookmarks: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var bookmarks []TriageBookmark
 	for rows.Next() {
@@ -1189,7 +1391,11 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to query bookmarks for action %s: %v", action, err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var bookmarks []TriageBookmark
 	for rows.Next() {
@@ -1798,7 +2004,11 @@ func getActiveProjects() ([]ActiveProject, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active projects: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var projects []ActiveProject
 	for rows.Next() {
@@ -1870,7 +2080,11 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reference collections: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var collections []ReferenceCollection
 	for rows.Next() {
@@ -2144,7 +2358,11 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project bookmarks: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var bookmarks []ProjectBookmark
 	for rows.Next() {
@@ -2306,7 +2524,11 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project bookmarks: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var bookmarks []ProjectBookmark
 	for rows.Next() {
