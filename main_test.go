@@ -3900,11 +3900,25 @@ func TestBookmarkUpdate_ResponseFormat(t *testing.T) {
 // ============ CORS MIDDLEWARE TESTS ============
 
 func TestCORSMiddleware_Behavior(t *testing.T) {
+	// Initialize CORS config for testing
+	originalCorsConfig := corsConfig
+	defer func() { corsConfig = originalCorsConfig }()
+	
+	corsConfig = CORSConfig{
+		AllowedOrigins: []string{"http://localhost:3000", "https://example.com"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
+		MaxAge:         "86400",
+		AllowWildcard:  false,
+	}
+	
 	t.Run("Should add CORS headers to responses", func(t *testing.T) {
 		// Create a simple handler that returns 200 OK
 		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("test response"))
+			if _, err := w.Write([]byte("test response")); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 		})
 		
 		// Wrap with CORS middleware
@@ -3916,9 +3930,9 @@ func TestCORSMiddleware_Behavior(t *testing.T) {
 		
 		wrappedHandler.ServeHTTP(rr, req)
 		
-		// Check that CORS headers are present
-		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
-			t.Errorf("Expected Access-Control-Allow-Origin '*', got %s", rr.Header().Get("Access-Control-Allow-Origin"))
+		// Check that CORS headers are present for allowed origin
+		if rr.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
+			t.Errorf("Expected Access-Control-Allow-Origin 'https://example.com', got %s", rr.Header().Get("Access-Control-Allow-Origin"))
 		}
 		
 		if rr.Header().Get("Access-Control-Allow-Methods") == "" {
@@ -3954,13 +3968,13 @@ func TestCORSMiddleware_Behavior(t *testing.T) {
 		
 		wrappedHandler.ServeHTTP(rr, req)
 		
-		// Should return 200 OK for preflight
+		// Should return 200 OK for preflight from allowed origin
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status 200 for OPTIONS, got %d", rr.Code)
 		}
 		
-		// Should have CORS headers
-		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+		// Should have CORS headers for allowed origin
+		if rr.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
 			t.Error("Expected CORS headers on OPTIONS response")
 		}
 	})
@@ -3968,12 +3982,16 @@ func TestCORSMiddleware_Behavior(t *testing.T) {
 	t.Run("Should preserve error responses with CORS headers", func(t *testing.T) {
 		errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("error message"))
+			if _, err := w.Write([]byte("error message")); err != nil {
+				t.Errorf("Failed to write error response: %v", err)
+			}
 		})
 		
 		wrappedHandler := corsMiddleware(errorHandler)
 		
 		req := httptest.NewRequest("POST", "/test", nil)
+		// Use an allowed origin for this test
+		req.Header.Set("Origin", "http://localhost:3000")
 		rr := httptest.NewRecorder()
 		
 		wrappedHandler.ServeHTTP(rr, req)
@@ -3983,8 +4001,8 @@ func TestCORSMiddleware_Behavior(t *testing.T) {
 			t.Errorf("Expected status 400, got %d", rr.Code)
 		}
 		
-		// But CORS headers should still be added
-		if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
+		// But CORS headers should still be added for allowed origins
+		if rr.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
 			t.Error("Expected CORS headers even on error responses")
 		}
 		
