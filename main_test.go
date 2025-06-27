@@ -1499,6 +1499,132 @@ func TestHandleProjects_InvalidMethods(t *testing.T) {
 	}
 }
 
+func TestHandleGetProjects_DatabaseError(t *testing.T) {
+	// Test with closed database to force error
+	testDB := setupTestDB(t)
+	db = testDB.db
+	testDB.db.Close() // Close database to force error
+	
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	rr := httptest.NewRecorder()
+	
+	handleGetProjects(rr, req)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	expectedError := "Failed to get projects"
+	if !strings.Contains(rr.Body.String(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got: %s", expectedError, rr.Body.String())
+	}
+}
+
+func TestHandleGetProjects_EmptyDatabase(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with empty database (no projects/bookmarks)
+		req := httptest.NewRequest("GET", "/api/projects", nil)
+		rr := httptest.NewRecorder()
+		
+		handleGetProjects(rr, req)
+		
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+		
+		var response ProjectsResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if len(response.ActiveProjects) != 0 {
+			t.Errorf("Expected 0 active projects, got %d", len(response.ActiveProjects))
+		}
+		
+		if len(response.ReferenceCollections) != 0 {
+			t.Errorf("Expected 0 reference collections, got %d", len(response.ReferenceCollections))
+		}
+	})
+}
+
+func TestHandleDeleteProject_DatabaseErrorOnCheck(t *testing.T) {
+	// Test database error when checking if project exists
+	testDB := setupTestDB(t)
+	db = testDB.db
+	testDB.db.Close() // Close database to force error
+	
+	req := httptest.NewRequest("DELETE", "/api/projects/1", nil)
+	rr := httptest.NewRecorder()
+	
+	handleDeleteProject(rr, req, 1)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	expectedError := "Failed to check project"
+	if !strings.Contains(rr.Body.String(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got: %s", expectedError, rr.Body.String())
+	}
+}
+
+func TestHandleDeleteProject_ProjectNotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		req := httptest.NewRequest("DELETE", "/api/projects/99999", nil)
+		rr := httptest.NewRecorder()
+		
+		handleDeleteProject(rr, req, 99999)
+		
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
+		}
+		
+		expectedError := "Project not found"
+		if !strings.Contains(rr.Body.String(), expectedError) {
+			t.Errorf("Expected error message to contain '%s', got: %s", expectedError, rr.Body.String())
+		}
+	})
+}
+
+func TestHandleDeleteProject_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a project first
+		_, err := tdb.db.Exec(`
+			INSERT INTO projects (name, description, status)
+			VALUES (?, ?, ?)
+		`, "Test Project", "Test Description", "active")
+		if err != nil {
+			t.Fatalf("Failed to create test project: %v", err)
+		}
+		
+		// Get the project ID
+		var projectID int
+		err = tdb.db.QueryRow("SELECT id FROM projects WHERE name = ?", "Test Project").Scan(&projectID)
+		if err != nil {
+			t.Fatalf("Failed to get project ID: %v", err)
+		}
+		
+		req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/projects/%d", projectID), nil)
+		rr := httptest.NewRecorder()
+		
+		handleDeleteProject(rr, req, projectID)
+		
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("Expected status %d, got %d", http.StatusNoContent, rr.Code)
+		}
+		
+		// Verify project was deleted
+		var count int
+		err = tdb.db.QueryRow("SELECT COUNT(*) FROM projects WHERE id = ?", projectID).Scan(&count)
+		if err != nil {
+			t.Errorf("Failed to check if project was deleted: %v", err)
+		}
+		if count != 0 {
+			t.Error("Project should have been deleted")
+		}
+	})
+}
+
 func TestHandleProjects_Headers(t *testing.T) {
 	withTestDB(t, func(t *testing.T, tdb *TestDB) {
 		req := httptest.NewRequest("GET", "/api/projects", nil)
@@ -2056,6 +2182,85 @@ func TestHandleProjectDetail_NotFound(t *testing.T) {
 			t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
 		}
 	})
+}
+
+// Additional comprehensive tests for handleProjectDetail to improve coverage
+func TestHandleProjectDetail_InvalidMethod(t *testing.T) {
+	methods := []string{"POST", "PUT", "DELETE", "PATCH"}
+	
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/api/projects/TestProject", nil)
+			rr := httptest.NewRecorder()
+			
+			handleProjectDetail(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Expected status %d for method %s, got %d", http.StatusMethodNotAllowed, method, rr.Code)
+			}
+		})
+	}
+}
+
+func TestHandleProjectDetail_EmptyTopic(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/projects/", nil)
+	rr := httptest.NewRecorder()
+	
+	handleProjectDetail(rr, req)
+	
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for empty topic, got %d", http.StatusBadRequest, rr.Code)
+	}
+	
+	if !strings.Contains(rr.Body.String(), "Topic is required") {
+		t.Errorf("Expected error message about required topic, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleProjectDetail_URLDecodeError(t *testing.T) {
+	// Create a request with a valid URL first, then modify the path to create invalid URL encoding
+	req := httptest.NewRequest("GET", "/api/projects/test", nil)
+	req.URL.Path = "/api/projects/%gg" // Invalid hex sequence that will cause QueryUnescape to fail
+	rr := httptest.NewRecorder()
+	
+	handleProjectDetail(rr, req)
+	
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for URL decode error, got %d", http.StatusBadRequest, rr.Code)
+	}
+	
+	if !strings.Contains(rr.Body.String(), "Invalid topic format") {
+		t.Errorf("Expected error message about invalid topic format, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleProjectDetail_DatabaseError(t *testing.T) {
+	// Use a closed database to simulate database error
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	req := httptest.NewRequest("GET", "/api/projects/TestProject", nil)
+	rr := httptest.NewRecorder()
+	
+	handleProjectDetail(rr, req)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d for database error, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	if !strings.Contains(rr.Body.String(), "Failed to get project detail") {
+		t.Errorf("Expected error message about failed project detail, got: %s", rr.Body.String())
+	}
 }
 
 func TestHandleProjectByID_Success(t *testing.T) {
@@ -3954,6 +4159,210 @@ func TestGetBookmarksByAction_Behavior(t *testing.T) {
 	})
 }
 
+// Additional comprehensive tests for handleBookmarks to improve coverage
+func TestHandleBookmarks_InvalidMethod(t *testing.T) {
+	methods := []string{"POST", "PUT", "DELETE", "PATCH"}
+	
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/api/bookmarks", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Expected status %d for method %s, got %d", http.StatusMethodNotAllowed, method, rr.Code)
+			}
+		})
+	}
+}
+
+func TestHandleBookmarks_LimitOffsetParsing(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Insert test bookmarks
+		for i := 0; i < 10; i++ {
+			_, err := tdb.db.Exec(`INSERT INTO bookmarks (url, title, action, timestamp) VALUES (?, ?, ?, ?)`,
+				fmt.Sprintf("https://test%d.com", i), fmt.Sprintf("Test %d", i), "share", "2023-12-01 10:00:00")
+			if err != nil {
+				t.Fatalf("Failed to insert test bookmark %d: %v", i, err)
+			}
+		}
+		
+		t.Run("Should handle valid limit", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&limit=5", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+				Limit     int               `json:"limit"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			if response.Limit != 5 {
+				t.Errorf("Expected limit 5, got %d", response.Limit)
+			}
+		})
+		
+		t.Run("Should handle valid offset", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&offset=3", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Bookmarks []ProjectBookmark `json:"bookmarks"`
+				Offset    int               `json:"offset"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			if response.Offset != 3 {
+				t.Errorf("Expected offset 3, got %d", response.Offset)
+			}
+		})
+		
+		t.Run("Should handle invalid limit gracefully", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&limit=invalid", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200 even with invalid limit, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Limit int `json:"limit"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should fall back to default limit (50)
+			if response.Limit != 50 {
+				t.Errorf("Expected default limit 50 for invalid input, got %d", response.Limit)
+			}
+		})
+		
+		t.Run("Should handle negative limit gracefully", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&limit=-5", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200 even with negative limit, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Limit int `json:"limit"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should fall back to default limit (50)
+			if response.Limit != 50 {
+				t.Errorf("Expected default limit 50 for negative input, got %d", response.Limit)
+			}
+		})
+		
+		t.Run("Should handle invalid offset gracefully", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&offset=invalid", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200 even with invalid offset, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Offset int `json:"offset"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should fall back to default offset (0)
+			if response.Offset != 0 {
+				t.Errorf("Expected default offset 0 for invalid input, got %d", response.Offset)
+			}
+		})
+		
+		t.Run("Should handle negative offset gracefully", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/bookmarks?action=share&offset=-3", nil)
+			rr := httptest.NewRecorder()
+			
+			handleBookmarks(rr, req)
+			
+			if rr.Code != http.StatusOK {
+				t.Errorf("Expected status 200 even with negative offset, got %d", rr.Code)
+			}
+			
+			var response struct {
+				Offset int `json:"offset"`
+			}
+			err := json.Unmarshal(rr.Body.Bytes(), &response)
+			if err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+			
+			// Should fall back to default offset (0)
+			if response.Offset != 0 {
+				t.Errorf("Expected default offset 0 for negative input, got %d", response.Offset)
+			}
+		})
+	})
+}
+
+func TestHandleBookmarks_DatabaseError(t *testing.T) {
+	// Use a closed database to simulate database error
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "closed_test.db")
+	
+	testDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	testDB.Close() // Close it to cause errors
+	
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+	
+	req := httptest.NewRequest("GET", "/api/bookmarks?action=share", nil)
+	rr := httptest.NewRecorder()
+	
+	handleBookmarks(rr, req)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d for database error, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	if !strings.Contains(rr.Body.String(), "Failed to get bookmarks") {
+		t.Errorf("Expected error message about failed bookmarks, got: %s", rr.Body.String())
+	}
+}
+
 // ============ DOMAIN EXTRACTION AND AGE CALCULATION TESTS ============
 
 func TestExtractDomain_EdgeCases(t *testing.T) {
@@ -4213,5 +4622,202 @@ func TestProjectSettings_Behavior(t *testing.T) {
 				t.Errorf("Expected status 405 for unsupported method, got %d", rr.Code)
 			}
 		})
+	})
+}
+
+func TestHandleUpdateProject_DatabaseError(t *testing.T) {
+	// Test database error during project update
+	testDB := setupTestDB(t)
+	db = testDB.db
+	testDB.db.Close() // Close database to force error
+	
+	updateData := map[string]interface{}{
+		"name": "Updated Project",
+		"description": "Updated description",
+	}
+	body, _ := json.Marshal(updateData)
+	req := httptest.NewRequest("PUT", "/api/projects", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	
+	handleUpdateProject(rr, req, 1)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	expectedError := "Failed to update project"
+	if !strings.Contains(rr.Body.String(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got: %s", expectedError, rr.Body.String())
+	}
+}
+
+func TestHandleGetProject_DatabaseError(t *testing.T) {
+	// Test database error during project retrieval
+	testDB := setupTestDB(t)
+	db = testDB.db
+	testDB.db.Close() // Close database to force error
+	
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	rr := httptest.NewRecorder()
+	
+	handleGetProject(rr, req, 1)
+	
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+	
+	expectedError := "Failed to get project"
+	if !strings.Contains(rr.Body.String(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got: %s", expectedError, rr.Body.String())
+	}
+}
+
+func TestTagsToJSON_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected string
+	}{
+		{
+			name:     "empty slice",
+			input:    []string{},
+			expected: "[]",
+		},
+		{
+			name:     "nil slice",
+			input:    nil,
+			expected: "[]",
+		},
+		{
+			name:     "single tag",
+			input:    []string{"tag1"},
+			expected: "[\"tag1\"]",
+		},
+		{
+			name:     "multiple tags",
+			input:    []string{"tag1", "tag2", "tag3"},
+			expected: "[\"tag1\",\"tag2\",\"tag3\"]",
+		},
+		{
+			name:     "tags with special characters",
+			input:    []string{"tag with spaces", "tag-with-dashes", "tag_with_underscores"},
+			expected: "[\"tag with spaces\",\"tag-with-dashes\",\"tag_with_underscores\"]",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tagsToJSON(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestTagsFromJSON_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+		isNil    bool
+	}{
+		{
+			name:     "empty string",
+			input:    "",
+			expected: nil,
+			isNil:    true,
+		},
+		{
+			name:     "empty array",
+			input:    "[]",
+			expected: nil,
+			isNil:    true,
+		},
+		{
+			name:     "single tag",
+			input:    "[\"tag1\"]",
+			expected: []string{"tag1"},
+			isNil:    false,
+		},
+		{
+			name:     "multiple tags",
+			input:    "[\"tag1\",\"tag2\",\"tag3\"]",
+			expected: []string{"tag1", "tag2", "tag3"},
+			isNil:    false,
+		},
+		{
+			name:     "invalid JSON",
+			input:    "[invalid json",
+			expected: nil,
+			isNil:    true,
+		},
+		{
+			name:     "non-array JSON",
+			input:    "{\"key\":\"value\"}",
+			expected: nil,
+			isNil:    true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tagsFromJSON(tt.input)
+			
+			if tt.isNil {
+				if result != nil {
+					t.Errorf("Expected nil result, got %v", result)
+				}
+			} else {
+				if result == nil {
+					t.Errorf("Expected non-nil result, got nil")
+					return
+				}
+				
+				if len(result) != len(tt.expected) {
+					t.Errorf("Expected %d tags, got %d", len(tt.expected), len(result))
+				}
+				
+				for i, expected := range tt.expected {
+					if i >= len(result) || result[i] != expected {
+						t.Errorf("Expected tag %d to be %s, got %s", i, expected, result[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSaveBookmarkToDB_AdditionalErrorCases(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with extremely long URL that might cause database constraints
+		longURL := "https://example.com/" + strings.Repeat("a", 5000)
+		req := BookmarkRequest{
+			URL:   longURL,
+			Title: "Test Title",
+		}
+		
+		// This should still work in SQLite, but tests the handling of large data
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Logf("Expected behavior: Long URL caused error: %v", err)
+		} else {
+			t.Logf("Long URL saved successfully")
+		}
+		
+		// Test with extremely long title
+		longTitle := strings.Repeat("Very Long Title ", 1000)
+		req2 := BookmarkRequest{
+			URL:   "https://example.com/test",
+			Title: longTitle,
+		}
+		
+		err = saveBookmarkToDB(req2)
+		if err != nil {
+			t.Logf("Expected behavior: Long title caused error: %v", err)
+		} else {
+			t.Logf("Long title saved successfully")
+		}
 	})
 }
