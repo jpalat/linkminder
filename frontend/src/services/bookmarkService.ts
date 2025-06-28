@@ -1,5 +1,5 @@
 import { apiClient } from './api'
-import type { Bookmark } from '@/types'
+import type { Bookmark, BookmarkAction } from '@/types'
 
 // API request/response types matching the Go backend
 
@@ -11,7 +11,7 @@ export interface BackendBookmarkResponse {
   title: string
   description?: string
   content?: string
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   share_to?: string
   topic?: string
@@ -29,7 +29,7 @@ export interface BookmarkCreateRequest {
   title: string
   description?: string
   content?: string
-  action?: 'read-later' | 'working' | 'share' | 'archived' | 'irrelevant'
+  action?: BookmarkAction
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
@@ -38,7 +38,7 @@ export interface BookmarkCreateRequest {
 }
 
 export interface BookmarkUpdateRequest {
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
@@ -50,7 +50,7 @@ export interface BookmarkFullUpdateRequest {
   title: string
   url: string
   description?: string
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string
   tags?: string[]
@@ -66,7 +66,7 @@ export interface TriageBookmark {
   timestamp: string
   domain?: string
   age?: string
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string
   tags?: string[]
@@ -224,7 +224,7 @@ class BookmarkService {
       action: triageBookmark.action,
       shareTo: triageBookmark.shareTo,
       topic: triageBookmark.topic,
-      timestamp: triageBookmark.timestamp,
+      timestamp: triageBookmark.timestamp || new Date().toISOString(),
       domain: triageBookmark.domain || this.extractDomain(triageBookmark.url),
       age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp),
       tags: triageBookmark.tags,
