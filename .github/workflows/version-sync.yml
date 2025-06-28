@@ -1,0 +1,92 @@
+name: Version Synchronization
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+      
+      - name: Update frontend package.json
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend
+            echo "Updating frontend version to ${{ steps.version.outputs.VERSION }}"
+            npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+            echo "Frontend package.json updated"
+          else
+            echo "Frontend package.json not found, skipping"
+          fi
+      
+      - name: Update extension manifest and package.json
+        run: |
+          if [ -f extension/manifest.json ]; then
+            cd extension
+            echo "Updating extension manifest version to ${{ steps.version.outputs.VERSION }}"
+            
+            # Update manifest.json
+            sed -i "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.VERSION }}\"/" manifest.json
+            
+            # Update package.json if it exists
+            if [ -f package.json ]; then
+              npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+              echo "Extension package.json updated"
+            fi
+            
+            echo "Extension manifest.json updated"
+          else
+            echo "Extension manifest.json not found, skipping"
+          fi
+      
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "No version changes to commit"
+            echo "HAS_CHANGES=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version changes detected"
+            echo "HAS_CHANGES=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit version updates
+        if: steps.changes.outputs.HAS_CHANGES == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Add only the version files
+          git add frontend/package.json extension/package.json extension/manifest.json 2>/dev/null || true
+          
+          git commit -m "chore: sync component versions to ${{ steps.version.outputs.VERSION }}
+
+          - Updated frontend/package.json version
+          - Updated extension/manifest.json version  
+          - Updated extension/package.json version (if exists)
+          
+          🤖 Generated with GitHub Actions" || exit 0
+          
+          echo "Pushing version sync commit..."
+          git push origin HEAD:main || echo "Failed to push version sync (may not have permissions)"

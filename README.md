@@ -177,13 +177,30 @@ npm install
 
 ## 🚀 Production Deployment
 
-### Option 1: Binary Deployment
+### Option 1: Download Pre-built Binaries
+Visit the [Releases page](../../releases) and download the binary for your platform:
+
+```bash
+# Linux/macOS
+wget https://github.com/jpalat/linkminder/releases/latest/download/bookminderapi-linux-amd64.tar.gz
+tar -xzf bookminderapi-linux-amd64.tar.gz
+cd bookminderapi-linux-amd64
+./install.sh  # Installs to /usr/local/bin
+bookminderapi
+
+# Windows
+# Download bookminderapi-windows-amd64.zip
+# Extract and run install.bat as administrator
+# Then run bookminderapi.exe
+```
+
+### Option 2: Build from Source
 ```bash
 go build -o bookminderapi main.go
 ./bookminderapi
 ```
 
-### Option 2: Docker (Create Dockerfile)
+### Option 3: Docker (Create Dockerfile)
 ```dockerfile
 FROM golang:1.23-alpine AS builder
 WORKDIR /app
@@ -199,7 +216,7 @@ EXPOSE 9090
 CMD ["./bookminderapi"]
 ```
 
-### Option 3: Systemd Service
+### Option 4: Systemd Service
 ```ini
 [Unit]
 Description=BookMinder API Server
@@ -293,6 +310,60 @@ migrate -path migrations -database sqlite3://bookmarks.db force 4
 lsof -i :9090
 kill -9 <PID>
 ```
+
+## 🎯 Creating Releases
+
+BookMinder uses automated releases with GitHub Actions. Here's how to create a new release:
+
+### For Maintainers
+
+1. **Ensure main branch is ready**
+   ```bash
+   git checkout main
+   git pull origin main
+   
+   # Verify all tests pass
+   go test
+   cd frontend && npm test
+   ```
+
+2. **Create and push a version tag**
+   ```bash
+   # Create a semantic version tag
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. **Automated release process**
+   The GitHub Actions workflows will automatically:
+   - Build multi-platform binaries (Linux, Windows, macOS)
+   - Package Chrome and Firefox extensions
+   - Create GitHub release with changelog
+   - Update component versions across frontend/extension
+   - Generate installation scripts
+
+### Release Artifacts
+
+Each release includes:
+- **Backend binaries**: Ready-to-run for Linux, Windows, macOS (x64 + ARM64)
+- **Installation scripts**: `install.sh` (Unix) and `install.bat` (Windows)
+- **Chrome extension**: `bookminder-chrome-extension-v1.2.3.zip`
+- **Firefox extension**: `bookminder-firefox-extension-v1.2.3.zip`
+- **Source code**: Automatic GitHub archives
+
+### Version Management
+
+- **Git tag**: Primary version source (e.g., `v1.2.3`)
+- **Backend**: Version embedded in binary at build time
+- **Frontend**: `package.json` automatically updated to match tag
+- **Extension**: `manifest.json` automatically updated to match tag
+
+### Semantic Versioning
+
+Follow [semver](https://semver.org/) conventions:
+- **Major** (`v2.0.0`): Breaking changes, incompatible API changes
+- **Minor** (`v1.1.0`): New features, backwards compatible
+- **Patch** (`v1.0.1`): Bug fixes, backwards compatible
 
 ## 📝 License
 

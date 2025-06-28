@@ -1,0 +1,252 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      tag_name: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [[ -n "$LAST_TAG" ]]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)")
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          release_name: BookMinder ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## What's Changed
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ## Installation
+            
+            ### Binary Download
+            Download the appropriate binary for your platform below.
+            
+            ### Docker
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.VERSION }}
+            ```
+            
+            ### Go Install
+            ```bash
+            go install github.com/${{ github.repository }}@${{ steps.get_version.outputs.VERSION }}
+            ```
+            
+            ## Components
+            - **Go API Backend**: Single binary with SQLite database
+            - **Vue.js Frontend**: Modern web interface
+            - **Chrome Extension**: One-click bookmark saving
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
+
+  build-binaries:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            cc: gcc
+          - goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+          - goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+          - goos: darwin
+            goarch: amd64
+            cc: o64-clang
+          - goos: darwin
+            goarch: arm64
+            cc: o64-clang
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          if [[ "${{ matrix.goos }}" == "linux" && "${{ matrix.goarch }}" == "arm64" ]]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          elif [[ "${{ matrix.goos }}" == "windows" ]]; then
+            sudo apt-get install -y gcc-mingw-w64-x86-64
+          fi
+      
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CC: ${{ matrix.cc }}
+        run: |
+          BINARY_NAME="bookminderapi"
+          if [[ "$GOOS" == "windows" ]]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          
+          echo "Building for $GOOS/$GOARCH..."
+          go build -ldflags="-s -w -X main.Version=${{ needs.create-release.outputs.tag_name }}" -o "${BINARY_NAME}" main.go
+          
+          # Create release package
+          PACKAGE_NAME="bookminderapi-${GOOS}-${GOARCH}"
+          mkdir "${PACKAGE_NAME}"
+          cp "${BINARY_NAME}" "${PACKAGE_NAME}/"
+          cp -r migrations "${PACKAGE_NAME}/"
+          cp README.md "${PACKAGE_NAME}/"
+          
+          # Create installation script
+          if [[ "$GOOS" == "windows" ]]; then
+            cat > "${PACKAGE_NAME}/install.bat" << 'EOL'
+@echo off
+echo Installing BookMinder API...
+copy bookminderapi.exe C:\Windows\System32\
+echo Installation complete. Run 'bookminderapi' from anywhere.
+EOL
+            zip -r "${PACKAGE_NAME}.zip" "${PACKAGE_NAME}"
+            ASSET_PATH="${PACKAGE_NAME}.zip"
+          else
+            cat > "${PACKAGE_NAME}/install.sh" << 'EOL'
+#!/bin/bash
+echo "Installing BookMinder API..."
+sudo cp bookminderapi /usr/local/bin/
+sudo chmod +x /usr/local/bin/bookminderapi
+echo "Installation complete. Run 'bookminderapi' from anywhere."
+EOL
+            chmod +x "${PACKAGE_NAME}/install.sh"
+            tar -czf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_NAME}"
+            ASSET_PATH="${PACKAGE_NAME}.tar.gz"
+          fi
+          
+          echo "ASSET_PATH=${ASSET_PATH}" >> $GITHUB_ENV
+          echo "ASSET_NAME=${ASSET_PATH}" >> $GITHUB_ENV
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ env.ASSET_PATH }}
+          asset_name: ${{ env.ASSET_NAME }}
+          asset_content_type: application/octet-stream
+
+  build-extension:
+    needs: create-release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./extension
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Update version in manifest
+        run: |
+          VERSION=${{ needs.create-release.outputs.tag_name }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+          if [ -f manifest.json ]; then
+            sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" manifest.json
+          else
+            echo "manifest.json not found, skipping version update"
+          fi
+      
+      - name: Install dependencies and build
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+            if npm run build 2>/dev/null; then
+              echo "Extension built successfully"
+            else
+              echo "No build script found, copying files directly"
+              mkdir -p build
+              cp -r *.js *.html *.json *.png build/ || true
+            fi
+          else
+            echo "No package.json found, copying files directly"
+            mkdir -p build
+            cp -r *.js *.html *.json *.png build/ || true
+          fi
+      
+      - name: Create extension packages
+        run: |
+          if [ -d build ]; then
+            cd build
+          fi
+          
+          # Chrome package
+          zip -r ../bookminder-chrome-extension-${{ needs.create-release.outputs.tag_name }}.zip . || true
+          
+          # Firefox package (same as Chrome for now)
+          zip -r ../bookminder-firefox-extension-${{ needs.create-release.outputs.tag_name }}.zip . || true
+          
+          cd ..
+          ls -la *.zip || echo "No extension packages created"
+      
+      - name: Upload Chrome Extension
+        if: hashFiles('extension/bookminder-chrome-extension-*.zip') != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./extension/bookminder-chrome-extension-${{ needs.create-release.outputs.tag_name }}.zip
+          asset_name: bookminder-chrome-extension-${{ needs.create-release.outputs.tag_name }}.zip
+          asset_content_type: application/zip
+      
+      - name: Upload Firefox Extension
+        if: hashFiles('extension/bookminder-firefox-extension-*.zip') != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./extension/bookminder-firefox-extension-${{ needs.create-release.outputs.tag_name }}.zip
+          asset_name: bookminder-firefox-extension-${{ needs.create-release.outputs.tag_name }}.zip
+          asset_content_type: application/zip
