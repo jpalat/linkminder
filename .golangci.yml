@@ -1,3 +1,6 @@
+# golangci-lint configuration
+version: 2
+
 run:
   timeout: 5m
   issues-exit-code: 1
@@ -14,21 +17,15 @@ linters-settings:
   funlen:
     lines: 80
     statements: 40
-  gci:
-    local-prefixes: bookminderapi
   goconst:
     min-len: 2
     min-occurrences: 2
   gocritic:
     enabled-tags:
       - diagnostic
-      - experimental
-      - opinionated
       - performance
       - style
-  gofumpt:
-    extra-rules: true
-  gomnd:
+  mnd:
     settings:
       mnd:
         checks: argument,case,condition,operation,return,assign
@@ -46,22 +43,17 @@ linters:
     - dupl
     - errcheck
     - funlen
-    - gci
     - goconst
     - gocritic
-    - gofumpt
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
     - nakedret
     - staticcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
@@ -71,7 +63,7 @@ issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
+        - mnd
         - funlen
     - path: main\.go
       linters:
