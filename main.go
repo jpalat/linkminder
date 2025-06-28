@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html"
 	"io"
 	"log"
 	"net/http"
@@ -843,7 +842,11 @@ func handleTopics(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string][]string{"topics": topics})
+	if err := json.NewEncoder(w).Encode(map[string][]string{"topics": topics}); err != nil {
+		log.Printf("Failed to encode topics response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func saveBookmarkToDB(req BookmarkRequest) error {
@@ -988,7 +991,11 @@ func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		log.Printf("Failed to encode stats response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func getStatsSummary() (*SummaryStats, error) {
@@ -1200,7 +1207,11 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(triageData)
+	if err := json.NewEncoder(w).Encode(triageData); err != nil {
+		log.Printf("Failed to encode triage response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleBookmarks(w http.ResponseWriter, r *http.Request) {
@@ -1268,7 +1279,11 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(bookmarksData)
+	if err := json.NewEncoder(w).Encode(bookmarksData); err != nil {
+		log.Printf("Failed to encode bookmarks response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func getTriageQueue(limit, offset int) (*TriageResponse, error) {
@@ -1563,7 +1578,11 @@ func handleGetProjects(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projects)
+	if err := json.NewEncoder(w).Encode(projects); err != nil {
+		log.Printf("Failed to encode projects response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleCreateProject(w http.ResponseWriter, r *http.Request) {
@@ -1619,7 +1638,11 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("Failed to encode created project response: %v", err)
+		// Can't call http.Error after WriteHeader, so just log the error
+		return
+	}
 }
 
 func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
@@ -1692,7 +1715,11 @@ func handleGetProject(w http.ResponseWriter, r *http.Request, projectID int) {
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("Failed to encode project response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) {
@@ -1770,7 +1797,11 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 	})
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(project)
+	if err := json.NewEncoder(w).Encode(project); err != nil {
+		log.Printf("Failed to encode updated project response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleDeleteProject(w http.ResponseWriter, r *http.Request, projectID int) {
@@ -2208,7 +2239,11 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projectDetail)
+	if err := json.NewEncoder(w).Encode(projectDetail); err != nil {
+		log.Printf("Failed to encode project detail response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleProjectByID(w http.ResponseWriter, r *http.Request) {
@@ -2280,7 +2315,11 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(projectDetail)
+	if err := json.NewEncoder(w).Encode(projectDetail); err != nil {
+		log.Printf("Failed to encode project detail response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
@@ -2738,7 +2777,11 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updatedBookmark)
+	if err := json.NewEncoder(w).Encode(updatedBookmark); err != nil {
+		log.Printf("Failed to encode updated bookmark response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func getBookmarkByID(id int) (*ProjectBookmark, error) {
@@ -3125,12 +3168,6 @@ func validateHTMLFile(filename string) error {
 	}
 	
 	return nil
-}
-
-// sanitizeInput sanitizes user input to prevent XSS
-func sanitizeInput(input string) string {
-	// HTML escape the input
-	return html.EscapeString(input)
 }
 
 // validateBookmarkInput validates bookmark request data
