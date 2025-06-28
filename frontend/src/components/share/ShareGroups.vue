@@ -109,7 +109,6 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useClipboard } from '@vueuse/core'
 import type { ShareGroup, Bookmark } from '@/types'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useNotifications } from '@/composables/useNotifications'
@@ -175,7 +174,7 @@ const itemFormats = [
 ]
 
 // Group-specific format options
-const getGroupFormats = (destination: string) => {
+const getGroupFormats = () => {
   return [
     { key: 'rich-text', label: 'Rich Text', icon: '📄' },
     { key: 'markdown', label: 'Markdown', icon: '📝' },
