@@ -1,6 +1,6 @@
 {
   "name": "bookminder-extension",
-  "version": "1.0.0",
+  "version": "0.7.0",
   "description": "Browser extension build tools for BookMinder",
   "scripts": {
     "build": "./build.sh",
@@ -11,7 +11,13 @@
     "dev:chrome": "echo 'Load extension from current directory in Chrome Developer Mode'",
     "dev:firefox": "echo 'Load extension from current directory in Firefox Developer Edition'"
   },
-  "keywords": ["browser-extension", "bookmarks", "chrome", "firefox", "safari"],
+  "keywords": [
+    "browser-extension",
+    "bookmarks",
+    "chrome",
+    "firefox",
+    "safari"
+  ],
   "author": "BookMinder",
   "license": "MIT"
 }

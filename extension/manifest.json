@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BookMinder",
-  "version": "1.0",
+  "version": "0.7.0",
   "description": "Save bookmarks with page content to BookMinder API",
   "permissions": [
     "activeTab",
