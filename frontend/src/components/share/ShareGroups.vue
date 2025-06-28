@@ -75,6 +75,7 @@
                 <button class="action-btn preview" @click="previewItem(item)">👁️</button>
                 <button class="action-btn edit" @click="editItem(item)">✏️</button>
                 <button class="action-btn share" @click="shareItem(item)">📤</button>
+                <button class="action-btn archive" @click="archiveItem(item)">📦</button>
               </div>
             </div>
             
@@ -125,6 +126,7 @@ const emit = defineEmits<{
   'preview-item': [item: Bookmark]
   'edit-item': [item: Bookmark]
   'share-item': [item: Bookmark]
+  'archive-item': [item: Bookmark]
 }>()
 
 // Copy functionality - use fallback method that works reliably
@@ -271,6 +273,10 @@ const editItem = (item: Bookmark) => {
 
 const shareItem = (item: Bookmark) => {
   emit('share-item', item)
+}
+
+const archiveItem = (item: Bookmark) => {
+  emit('archive-item', item)
 }
 
 const copyGroupItems = async (group: ShareGroup, format: string) => {
@@ -541,6 +547,11 @@ const getItemPreview = (item: Bookmark, format: string): string => {
 .action-btn.share {
   background: #c6f6d5;
   color: #22543d;
+}
+
+.action-btn.archive {
+  background: #fed7d7;
+  color: #742a2a;
 }
 
 /* Share Formats */

@@ -127,7 +127,13 @@
               </div>
             </div>
             <div class="section-content">
-              <ShareGroups :groups="shareGroups" />
+              <ShareGroups 
+                :groups="shareGroups" 
+                @edit-item="(item) => handleEdit(item.id)"
+                @archive-item="(item) => moveBookmarks([item.id], 'archived')"
+                @preview-item="handlePreviewItem"
+                @share-item="(item) => handleShareSingle(item.id)"
+              />
             </div>
           </div>
 
@@ -561,6 +567,12 @@ const handleCancelConfirm = () => {
 const moveSelectedTo = (action: string) => {
   const selectedIds = Array.from(selectedItems.value)
   moveBookmarks(selectedIds, action)
+}
+
+const handlePreviewItem = (item: Bookmark) => {
+  // For now, just open the URL in a new tab
+  // This could be enhanced with a modal preview in the future
+  window.open(item.url, '_blank')
 }
 
 // Lifecycle
