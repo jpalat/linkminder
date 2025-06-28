@@ -376,7 +376,17 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookmarkStore } from '@/stores/bookmarks'
 import { projectService } from '@/services/projectService'
-import type { Bookmark, ProjectDetail } from '@/types'
+import type { Bookmark, ProjectDetail, BookmarkAction } from '@/types'
+
+interface BookmarkFormData {
+  url: string
+  title: string
+  description: string
+  action: string
+  topic: string
+  shareTo: string
+  content: string
+}
 import AppButton from '@/components/ui/AppButton.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppInput from '@/components/ui/AppInput.vue'
@@ -571,7 +581,7 @@ const deleteBookmark = (bookmark: Bookmark) => {
   }
 }
 
-const bulkAction = async (action: string) => {
+const bulkAction = async (action: BookmarkAction) => {
   const bookmarkIds = Array.from(selectedBookmarks.value)
   try {
     await Promise.all(bookmarkIds.map(id => 
@@ -620,10 +630,11 @@ const performDeleteBookmark = async (bookmarkId: string) => {
   }
 }
 
-const handleAddBookmark = async (bookmark: Omit<Bookmark, 'id' | 'timestamp'>) => {
+const handleAddBookmark = async (bookmark: BookmarkFormData) => {
   try {
     await bookmarkStore.addBookmark({
       ...bookmark,
+      action: bookmark.action as BookmarkAction,
       topic: projectData.value?.topic
     })
     showAddBookmarkModal.value = false
