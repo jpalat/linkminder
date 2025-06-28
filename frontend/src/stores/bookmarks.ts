@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import type { Bookmark, FilterState, TabType, DashboardStats, Project } from '@/types'
 import { bookmarkService } from '@/services/bookmarkService'
 import { projectService } from '@/services/projectService'
-import { getErrorMessage, isApiError } from '@/services/api'
+// Remove unused imports
 import { getErrorDisplayMessage, isNetworkError } from '@/composables/useApiError'
 import { useNotifications } from '@/composables/useNotifications'
 
@@ -302,7 +302,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
   const moveBookmarks = async (bookmarkIds: string[], action: string) => {
     try {
       // Update each bookmark
-      const promises = bookmarkIds.map(id => updateBookmark(id, { action: action as any }))
+      const promises = bookmarkIds.map(id => updateBookmark(id, { action }))
       await Promise.all(promises)
       
       // Show bulk operation notification
@@ -329,9 +329,6 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     loading.value = true
     error.value = null
     try {
-      // Load dashboard stats first to get overall counts
-      const stats = await bookmarkService.getDashboardStats()
-      
       // Load ALL bookmarks (triage + share + working + archived)
       const allBookmarks = await bookmarkService.getAllBookmarks()
       
@@ -409,25 +406,6 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
   
-  // Helper function to calculate age
-  const calculateAge = (timestamp: string): string => {
-    const now = new Date()
-    const created = new Date(timestamp)
-    const diffMs = now.getTime() - created.getTime()
-    
-    const diffMinutes = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    const diffWeeks = Math.floor(diffDays / 7)
-    const diffMonths = Math.floor(diffDays / 30)
-    
-    if (diffMinutes < 1) return 'just now'
-    if (diffMinutes < 60) return `${diffMinutes}m`
-    if (diffHours < 24) return `${diffHours}h`
-    if (diffDays < 7) return `${diffDays}d`
-    if (diffWeeks < 4) return `${diffWeeks}w`
-    return `${diffMonths}mo`
-  }
 
   return {
     // State
@@ -487,13 +465,6 @@ function getDestinationColor(destination: string): string {
   return colors[destination] || '#6b7280'
 }
 
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname
-  } catch {
-    return 'unknown'
-  }
-}
 
 function getMockBookmarks(): Bookmark[] {
   return [
