@@ -1,4 +1,4 @@
-import { apiClient, type ApiResponse } from './api'
+import { apiClient } from './api'
 import type { Project, Bookmark, ProjectDetail } from '@/types'
 
 // API response types matching the Go backend
@@ -115,7 +115,7 @@ class ProjectService {
       title: backendBookmark.title,
       description: backendBookmark.description,
       content: backendBookmark.content,
-      action: backendBookmark.action as any,
+      action: backendBookmark.action,
       timestamp: backendBookmark.timestamp,
       domain: backendBookmark.domain || this.extractDomain(backendBookmark.url),
       age: backendBookmark.age || this.calculateAge(backendBookmark.timestamp)
