@@ -14,9 +14,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extension
     
     steps:
     - uses: actions/checkout@v4
@@ -30,6 +27,7 @@ jobs:
     
     - name: Install dependencies
       run: npm ci
+      working-directory: ./extension
     
     - name: Validate manifest
       run: |
@@ -41,6 +39,7 @@ jobs:
           }
           console.log('Manifest validation passed');
         "
+      working-directory: ./extension
     
     - name: Lint extension files
       run: |
@@ -51,12 +50,14 @@ jobs:
         test -f popup.js || (echo "popup.js missing" && exit 1)
         test -f background.js || (echo "background.js missing" && exit 1)
         echo "All required files present"
+      working-directory: ./extension
     
     - name: Build extension
       run: |
         mkdir -p build
         cp -r *.js *.html *.json *.png build/
         echo "Extension built successfully"
+      working-directory: ./extension
     
     - name: Upload extension artifacts
       uses: actions/upload-artifact@v4
