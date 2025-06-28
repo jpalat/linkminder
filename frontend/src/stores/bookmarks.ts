@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Bookmark, FilterState, TabType, DashboardStats, Project } from '@/types'
+import type { Bookmark, FilterState, TabType, DashboardStats, Project, BookmarkAction } from '@/types'
 import { bookmarkService } from '@/services/bookmarkService'
 import { projectService } from '@/services/projectService'
 // Remove unused imports
@@ -299,7 +299,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
 
-  const moveBookmarks = async (bookmarkIds: string[], action: string) => {
+  const moveBookmarks = async (bookmarkIds: string[], action: BookmarkAction) => {
     try {
       // Update each bookmark
       const promises = bookmarkIds.map(id => updateBookmark(id, { action }))
