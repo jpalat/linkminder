@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -574,8 +576,15 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the dashboard HTML file
-	dashboardHTML, err := os.ReadFile("dashboard.html")
+	// Validate and read the dashboard HTML file
+	filename := "dashboard.html"
+	if err := validateHTMLFile(filename); err != nil {
+		log.Printf("Invalid HTML file: %v", err)
+		http.Error(w, "File not accessible", http.StatusForbidden)
+		return
+	}
+	
+	dashboardHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read dashboard.html: %v", err)
 		logStructured("ERROR", "api", "Failed to read dashboard file", map[string]interface{}{
@@ -589,7 +598,8 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, err := w.Write(dashboardHTML); err != nil {
 		log.Printf("Failed to write dashboard HTML: %v", err)
 		http.Error(w, "Failed to serve dashboard", http.StatusInternalServerError)
@@ -618,8 +628,15 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the projects HTML file
-	projectsHTML, err := os.ReadFile("projects.html")
+	// Validate and read the projects HTML file
+	filename := "projects.html"
+	if err := validateHTMLFile(filename); err != nil {
+		log.Printf("Invalid HTML file: %v", err)
+		http.Error(w, "File not accessible", http.StatusForbidden)
+		return
+	}
+	
+	projectsHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read projects.html: %v", err)
 		logStructured("ERROR", "api", "Failed to read projects file", map[string]interface{}{
@@ -662,8 +679,15 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the project detail HTML file
-	projectDetailHTML, err := os.ReadFile("project-detail.html")
+	// Validate and read the project detail HTML file
+	filename := "project-detail.html"
+	if err := validateHTMLFile(filename); err != nil {
+		log.Printf("Invalid HTML file: %v", err)
+		http.Error(w, "File not accessible", http.StatusForbidden)
+		return
+	}
+	
+	projectDetailHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read project-detail.html: %v", err)
 		logStructured("ERROR", "api", "Failed to read project detail file", map[string]interface{}{
@@ -723,13 +747,15 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		"has_content": len(req.Content) > 0,
 	})
 
-	if req.URL == "" || req.Title == "" {
-		log.Printf("Validation failed: missing required fields (URL=%s, Title=%s)", req.URL, req.Title)
+	// Validate input using enhanced validation
+	if err := validateBookmarkInput(req); err != nil {
 		logStructured("WARN", "api", "Validation failed", map[string]interface{}{
-			"missing_url": req.URL == "",
-			"missing_title": req.Title == "",
+			"error": err.Error(),
+			"url":   req.URL,
+			"title": req.Title,
 		})
-		http.Error(w, "URL and title are required", http.StatusBadRequest)
+		log.Printf("Validation failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -3079,6 +3105,60 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		"topic":        actualTopic,
 		"rowsAffected": rowsAffected,
 	})
+	
+	return nil
+}
+
+// validateHTMLFile validates that the file path is safe to serve
+func validateHTMLFile(filename string) error {
+	// Clean the path to prevent directory traversal
+	cleanPath := filepath.Clean(filename)
+	
+	// Ensure the file is in the current directory and has .html extension
+	if !strings.HasSuffix(cleanPath, ".html") {
+		return fmt.Errorf("invalid file extension")
+	}
+	
+	// Prevent directory traversal
+	if strings.Contains(cleanPath, "..") || strings.HasPrefix(cleanPath, "/") {
+		return fmt.Errorf("invalid file path")
+	}
+	
+	return nil
+}
+
+// sanitizeInput sanitizes user input to prevent XSS
+func sanitizeInput(input string) string {
+	// HTML escape the input
+	return html.EscapeString(input)
+}
+
+// validateBookmarkInput validates bookmark request data
+func validateBookmarkInput(req BookmarkRequest) error {
+	// Validate required fields
+	if strings.TrimSpace(req.URL) == "" {
+		return fmt.Errorf("URL is required")
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return fmt.Errorf("title is required")
+	}
+	
+	// Validate URL format
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return fmt.Errorf("invalid URL format")
+	}
+	
+	// Validate input lengths
+	if len(req.URL) > 2048 {
+		return fmt.Errorf("URL too long (max 2048 characters)")
+	}
+	if len(req.Title) > 500 {
+		return fmt.Errorf("title too long (max 500 characters)")
+	}
+	if len(req.Description) > 2000 {
+		return fmt.Errorf("description too long (max 2000 characters)")
+	}
 	
 	return nil
 }
