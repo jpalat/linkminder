@@ -137,22 +137,18 @@ jobs:
           
           # Create installation script
           if [[ "$GOOS" == "windows" ]]; then
-            cat > "${PACKAGE_NAME}/install.bat" << 'EOL'
-@echo off
-echo Installing BookMinder API...
-copy bookminderapi.exe C:\Windows\System32\
-echo Installation complete. Run 'bookminderapi' from anywhere.
-EOL
+            echo "@echo off" > "${PACKAGE_NAME}/install.bat"
+            echo "echo Installing BookMinder API..." >> "${PACKAGE_NAME}/install.bat"
+            echo "copy bookminderapi.exe C:\\Windows\\System32\\" >> "${PACKAGE_NAME}/install.bat"
+            echo "echo Installation complete. Run 'bookminderapi' from anywhere." >> "${PACKAGE_NAME}/install.bat"
             zip -r "${PACKAGE_NAME}.zip" "${PACKAGE_NAME}"
             ASSET_PATH="${PACKAGE_NAME}.zip"
           else
-            cat > "${PACKAGE_NAME}/install.sh" << 'EOL'
-#!/bin/bash
-echo "Installing BookMinder API..."
-sudo cp bookminderapi /usr/local/bin/
-sudo chmod +x /usr/local/bin/bookminderapi
-echo "Installation complete. Run 'bookminderapi' from anywhere."
-EOL
+            echo "#!/bin/bash" > "${PACKAGE_NAME}/install.sh"
+            echo "echo \"Installing BookMinder API...\"" >> "${PACKAGE_NAME}/install.sh"
+            echo "sudo cp bookminderapi /usr/local/bin/" >> "${PACKAGE_NAME}/install.sh"
+            echo "sudo chmod +x /usr/local/bin/bookminderapi" >> "${PACKAGE_NAME}/install.sh"
+            echo "echo \"Installation complete. Run 'bookminderapi' from anywhere.\"" >> "${PACKAGE_NAME}/install.sh"
             chmod +x "${PACKAGE_NAME}/install.sh"
             tar -czf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_NAME}"
             ASSET_PATH="${PACKAGE_NAME}.tar.gz"
