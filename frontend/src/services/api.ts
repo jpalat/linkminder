@@ -1,21 +1,27 @@
 // Base API client configuration and utilities
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data: T
   status: number
   statusText: string
   headers: Record<string, string>
 }
 
+export interface ApiErrorData {
+  error?: string
+  message?: string
+  details?: string | Record<string, unknown>
+}
+
 export class ApiError extends Error {
   status?: number
   statusText?: string
-  data?: any
+  data?: ApiErrorData
 
   constructor(options: {
     message: string
     status?: number
     statusText?: string
-    data?: any
+    data?: ApiErrorData
   }) {
     super(options.message)
     this.name = 'ApiError'
@@ -76,7 +82,7 @@ export class ApiClient {
           message: `Request failed: ${response.status} ${response.statusText}`,
           status: response.status,
           statusText: response.statusText,
-          data
+          data: data as ApiErrorData
         })
       }
 
@@ -109,7 +115,7 @@ export class ApiClient {
   }
 
   // HTTP methods
-  async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+  async get<T>(endpoint: string, params?: Record<string, string | number | boolean>): Promise<ApiResponse<T>> {
     let url = endpoint
     
     if (params) {
@@ -128,21 +134,21 @@ export class ApiClient {
     return this.request<T>(url, { method: 'GET' })
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data?: Record<string, unknown> | unknown[] | object): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined
     })
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data?: Record<string, unknown> | unknown[] | object): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined
     })
   }
 
-  async patch<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async patch<T>(endpoint: string, data?: Record<string, unknown> | unknown[] | object): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined
@@ -154,6 +160,10 @@ export class ApiClient {
   }
 
   // Utility methods
+  getBaseURL(): string {
+    return this.baseURL
+  }
+
   setBaseURL(url: string): void {
     this.baseURL = url
   }
@@ -171,11 +181,15 @@ export class ApiClient {
 export const apiClient = new ApiClient()
 
 // Error handling utilities
-export function isApiError(error: any): error is ApiError {
-  return error && typeof error.message === 'string'
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError || 
+    (error !== null && 
+     typeof error === 'object' && 
+     'message' in error && 
+     typeof (error as Record<string, unknown>).message === 'string')
 }
 
-export function getErrorMessage(error: any): string {
+export function getErrorMessage(error: unknown): string {
   if (isApiError(error)) {
     return error.message
   }
@@ -214,7 +228,7 @@ export function getApiBaseURL(): string {
   }
   
   // Server-side rendering or Node.js environment
-  // @ts-ignore - process may not be available in browser
+  // @ts-expect-error - process may not be available in browser environment
   return (typeof process !== 'undefined' && process.env?.API_BASE_URL) || 'http://localhost:9090'
 }
 

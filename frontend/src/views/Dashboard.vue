@@ -251,10 +251,25 @@
 </template>
 
 <script setup lang="ts">
+import { defineOptions } from 'vue'
 import { ref, computed, onMounted } from 'vue'
+
+defineOptions({
+  name: 'DashboardView'
+})
 import { storeToRefs } from 'pinia'
 import { useBookmarkStore } from '@/stores/bookmarks'
-import type { TabType } from '@/types'
+import type { TabType, ProjectStat, Bookmark, BookmarkAction } from '@/types'
+
+interface BookmarkFormData {
+  url: string
+  title: string
+  description: string
+  action: string
+  topic: string
+  shareTo: string
+  content: string
+}
 
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
@@ -268,7 +283,6 @@ import EditBookmarkModal from '@/components/modals/EditBookmarkModal.vue'
 import MoveToProjectModal from '@/components/modals/MoveToProjectModal.vue'
 import ShareBookmarkModal from '@/components/modals/ShareBookmarkModal.vue'
 import ConfirmModal, { type ConfirmationConfig } from '@/components/modals/ConfirmModal.vue'
-import type { Bookmark } from '@/types'
 import { ServerStatus } from '@/utils/serverStatus'
 
 const bookmarkStore = useBookmarkStore()
@@ -405,7 +419,7 @@ const handleMoveToProject = async (bookmarkId: string, topic: string) => {
   }
 }
 
-const handleProjectExport = (project: any) => {
+const handleProjectExport = (project: ProjectStat) => {
   // Simple CSV export functionality
   const csvContent = `Project: ${project.topic}\nLinks: ${project.count}\nStatus: ${project.status}\nLast Updated: ${project.lastUpdated}\n\nExported at: ${new Date().toISOString()}`
   
@@ -460,10 +474,13 @@ const handleShareBookmarks = async (shareData: { destination: string; notes?: st
   }
 }
 
-const handleAddBookmark = async (bookmarkData: any) => {
+const handleAddBookmark = async (bookmarkData: BookmarkFormData) => {
   try {
     // Add the bookmark to the store
-    await addBookmark(bookmarkData)
+    await addBookmark({
+      ...bookmarkData,
+      action: bookmarkData.action as BookmarkAction
+    })
     console.log('Added bookmark:', bookmarkData)
     // TODO: Show success notification
   } catch (error) {
@@ -566,7 +583,7 @@ const handleCancelConfirm = () => {
 
 const moveSelectedTo = (action: string) => {
   const selectedIds = Array.from(selectedItems.value)
-  moveBookmarks(selectedIds, action)
+  moveBookmarks(selectedIds, action as BookmarkAction)
 }
 
 const handlePreviewItem = (item: Bookmark) => {

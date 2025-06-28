@@ -1,10 +1,12 @@
+export type BookmarkAction = 'read-later' | 'working' | 'share' | 'archived' | 'irrelevant'
+
 export interface Bookmark {
   id: string
   url: string
   title: string
   description?: string
   content?: string
-  action?: 'read-later' | 'working' | 'share' | 'archived' | 'irrelevant'
+  action?: BookmarkAction
   shareTo?: string
   topic?: string
   project_id?: number

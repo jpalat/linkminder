@@ -229,7 +229,7 @@ const getActualDomain = (project: ProjectStat): string => {
     try {
       const url = new URL(project.latestURL)
       return url.hostname
-    } catch (e) {
+    } catch {
       // Fallback to sample domain if URL parsing fails
       return getSampleDomain(project.topic)
     }

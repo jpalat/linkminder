@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 // Quick script to test if the Go server is running
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const http = require('http');
 
 const SERVER_URL = 'http://localhost:9090';

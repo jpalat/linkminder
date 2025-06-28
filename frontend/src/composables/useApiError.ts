@@ -6,7 +6,7 @@ export interface UseApiErrorReturn {
   isError: Readonly<Ref<boolean>>
   setError: (error: string | Error | ApiError | null) => void
   clearError: () => void
-  handleError: (error: any) => void
+  handleError: (error: unknown) => void
 }
 
 /**
@@ -35,9 +35,15 @@ export function useApiError(): UseApiErrorReturn {
     error.value = null
   }
 
-  const handleError = (err: any) => {
+  const handleError = (err: unknown) => {
     console.error('API Error:', err)
-    setError(err)
+    if (typeof err === 'string') {
+      setError(err)
+    } else if (err instanceof Error) {
+      setError(err)
+    } else {
+      setError('An unknown error occurred')
+    }
   }
 
   return {
@@ -52,7 +58,7 @@ export function useApiError(): UseApiErrorReturn {
 /**
  * Convert API errors to user-friendly messages
  */
-export function getErrorDisplayMessage(error: any): string {
+export function getErrorDisplayMessage(error: unknown): string {
   if (isApiError(error)) {
     switch (error.status) {
       case 400:
@@ -93,7 +99,7 @@ export function getErrorDisplayMessage(error: any): string {
 /**
  * Check if an error is a network error
  */
-export function isNetworkError(error: any): boolean {
+export function isNetworkError(error: unknown): boolean {
   if (isApiError(error)) {
     return error.status === 0 || error.statusText === 'NetworkError'
   }
@@ -110,7 +116,7 @@ export function isNetworkError(error: any): boolean {
 /**
  * Check if an error is a server error (5xx)
  */
-export function isServerError(error: any): boolean {
+export function isServerError(error: unknown): boolean {
   if (isApiError(error)) {
     return error.status !== undefined && error.status >= 500 && error.status < 600
   }
@@ -120,7 +126,7 @@ export function isServerError(error: any): boolean {
 /**
  * Check if an error is a client error (4xx)
  */
-export function isClientError(error: any): boolean {
+export function isClientError(error: unknown): boolean {
   if (isApiError(error)) {
     return error.status !== undefined && error.status >= 400 && error.status < 500
   }

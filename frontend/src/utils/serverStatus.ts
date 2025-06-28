@@ -5,7 +5,7 @@ import { apiClient } from '@/services/api'
  */
 export class ServerStatus {
   static getCurrentServerURL(): string {
-    return (apiClient as any).baseURL || 'Unknown'
+    return apiClient.getBaseURL() || 'Unknown'
   }
 
   static async checkServerHealth(): Promise<{
@@ -107,7 +107,13 @@ export class ServerStatus {
 }
 
 // Global functions for browser console debugging
+declare global {
+  interface Window {
+    serverStatus?: typeof ServerStatus
+  }
+}
+
 if (typeof window !== 'undefined') {
-  (window as any).serverStatus = ServerStatus
+  window.serverStatus = ServerStatus
   console.log('🛠️  Server debugging available via: window.serverStatus')
 }

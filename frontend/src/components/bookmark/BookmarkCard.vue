@@ -90,7 +90,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { Bookmark } from '@/types'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'

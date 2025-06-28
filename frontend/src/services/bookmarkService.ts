@@ -1,13 +1,35 @@
-import { apiClient, type ApiResponse } from './api'
-import type { Bookmark } from '@/types'
+import { apiClient } from './api'
+import type { Bookmark, BookmarkAction } from '@/types'
 
 // API request/response types matching the Go backend
+
+// Backend bookmark response structure
+export interface BackendBookmarkResponse {
+  id: number | string
+  ID?: number | string
+  url: string
+  title: string
+  description?: string
+  content?: string
+  action?: BookmarkAction
+  shareTo?: string
+  share_to?: string
+  topic?: string
+  projectId?: number
+  project_id?: number
+  timestamp?: string
+  created_at?: string
+  domain?: string
+  age?: string
+  tags?: string[]
+  customProperties?: Record<string, string>
+}
 export interface BookmarkCreateRequest {
   url: string
   title: string
   description?: string
   content?: string
-  action?: 'read-later' | 'working' | 'share' | 'archived' | 'irrelevant'
+  action?: BookmarkAction
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
@@ -16,7 +38,7 @@ export interface BookmarkCreateRequest {
 }
 
 export interface BookmarkUpdateRequest {
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string        // Legacy support
   projectId?: number    // New field
@@ -28,7 +50,7 @@ export interface BookmarkFullUpdateRequest {
   title: string
   url: string
   description?: string
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string
   tags?: string[]
@@ -44,7 +66,7 @@ export interface TriageBookmark {
   timestamp: string
   domain?: string
   age?: string
-  action?: string
+  action?: BookmarkAction
   shareTo?: string
   topic?: string
   tags?: string[]
@@ -83,7 +105,7 @@ class BookmarkService {
    * POST /bookmark
    */
   async createBookmark(bookmark: BookmarkCreateRequest): Promise<Bookmark> {
-    const response = await apiClient.post<any>('/bookmark', bookmark)
+    const response = await apiClient.post<BackendBookmarkResponse>('/bookmark', bookmark)
     
     // Transform the response to match our frontend Bookmark interface
     return this.transformBackendBookmark(response.data)
@@ -94,7 +116,7 @@ class BookmarkService {
    * PATCH /api/bookmarks/{id}
    */
   async updateBookmark(id: string, updates: BookmarkUpdateRequest): Promise<Bookmark> {
-    const response = await apiClient.patch<any>(`/api/bookmarks/${id}`, updates)
+    const response = await apiClient.patch<BackendBookmarkResponse>(`/api/bookmarks/${id}`, updates)
     return this.transformBackendBookmark(response.data)
   }
 
@@ -103,7 +125,7 @@ class BookmarkService {
    * PUT /api/bookmarks/{id}
    */
   async updateBookmarkFull(id: string, bookmark: BookmarkFullUpdateRequest): Promise<Bookmark> {
-    const response = await apiClient.put<any>(`/api/bookmarks/${id}`, bookmark)
+    const response = await apiClient.put<BackendBookmarkResponse>(`/api/bookmarks/${id}`, bookmark)
     return this.transformBackendBookmark(response.data)
   }
 
@@ -192,17 +214,17 @@ class BookmarkService {
   /**
    * Transform triage bookmark data to frontend format
    */
-  private transformTriageBookmark(triageBookmark: any): Bookmark {
+  private transformTriageBookmark(triageBookmark: BackendBookmarkResponse): Bookmark {
     return {
       id: String(triageBookmark.id),
       url: triageBookmark.url,
       title: triageBookmark.title,
       description: triageBookmark.description,
       content: triageBookmark.content,
-      action: triageBookmark.action as any,
+      action: triageBookmark.action,
       shareTo: triageBookmark.shareTo,
       topic: triageBookmark.topic,
-      timestamp: triageBookmark.timestamp,
+      timestamp: triageBookmark.timestamp || new Date().toISOString(),
       domain: triageBookmark.domain || this.extractDomain(triageBookmark.url),
       age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp),
       tags: triageBookmark.tags,
@@ -365,7 +387,7 @@ class BookmarkService {
    * Transform backend bookmark data to frontend Bookmark interface
    * Handles differences between backend and frontend data structures
    */
-  private transformBackendBookmark(backendBookmark: any): Bookmark {
+  private transformBackendBookmark(backendBookmark: BackendBookmarkResponse): Bookmark {
     return {
       id: String(backendBookmark.id || backendBookmark.ID), // Handle both cases
       url: backendBookmark.url,

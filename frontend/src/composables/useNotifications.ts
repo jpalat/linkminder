@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import type { ToastProps } from '@/components/ui/AppToast.vue'
 
 export interface Notification extends ToastProps {
