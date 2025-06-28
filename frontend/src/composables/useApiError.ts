@@ -37,7 +37,13 @@ export function useApiError(): UseApiErrorReturn {
 
   const handleError = (err: unknown) => {
     console.error('API Error:', err)
-    setError(err)
+    if (typeof err === 'string') {
+      setError(err)
+    } else if (err instanceof Error) {
+      setError(err)
+    } else {
+      setError('An unknown error occurred')
+    }
   }
 
   return {
