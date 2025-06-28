@@ -14,9 +14,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
     
     strategy:
       matrix:
@@ -34,18 +31,23 @@ jobs:
     
     - name: Install dependencies
       run: npm ci
+      working-directory: ./frontend
     
     - name: Run linting
       run: npm run lint
+      working-directory: ./frontend
     
     - name: Run type checking
       run: npm run type-check
+      working-directory: ./frontend
     
     - name: Run tests
       run: npm run test:run
+      working-directory: ./frontend
     
     - name: Build for production
       run: npm run build
+      working-directory: ./frontend
     
     - name: Upload build artifacts
       if: matrix.node-version == '20'
@@ -61,3 +63,4 @@ jobs:
         echo "Checking build output size..."
         du -sh dist/
         find dist/ -name "*.js" -exec ls -lh {} \;
+      working-directory: ./frontend
