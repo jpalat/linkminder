@@ -438,8 +438,14 @@
                 updateStats();
             } catch (error) {
                 console.error('Failed to fetch projects:', error);
-                document.getElementById('projectsGrid').innerHTML = 
-                    '<div class="empty-state"><h3>Failed to load projects</h3><p>Please try refreshing the page.</p></div>';
+                // Security: Use safe DOM manipulation instead of innerHTML
+                const projectsGrid = document.getElementById('projectsGrid');
+                projectsGrid.textContent = '';
+                const errorState = document.createElement('div');
+                errorState.className = 'empty-state';
+                errorState.appendChild(createSafeHTML('h3', 'Failed to load projects'));
+                errorState.appendChild(createSafeHTML('p', 'Please try refreshing the page.'));
+                projectsGrid.appendChild(errorState);
             }
         }
         
@@ -454,17 +460,25 @@
             const projectsGrid = document.getElementById('projectsGrid');
             
             if (filteredProjects.length === 0) {
-                projectsGrid.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No ${filter === 'all' ? '' : filter} projects found</h3>
-                        <p>Start organizing your bookmarks by creating your first project!</p>
-                        <button class="btn btn-primary" onclick="createNewProject()">Create Project</button>
-                    </div>
-                `;
+                // Security: Use safe DOM manipulation instead of innerHTML
+                projectsGrid.textContent = '';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                
+                const title = createSafeHTML('h3', `No ${filter === 'all' ? '' : filter} projects found`);
+                const description = createSafeHTML('p', 'Start organizing your bookmarks by creating your first project!');
+                const button = createSafeHTML('button', 'Create Project', { class: 'btn btn-primary' });
+                button.onclick = createNewProject;
+                
+                emptyState.appendChild(title);
+                emptyState.appendChild(description);
+                emptyState.appendChild(button);
+                projectsGrid.appendChild(emptyState);
                 return;
             }
             
-            projectsGrid.innerHTML = '';
+            // Security: Clear existing content safely
+            projectsGrid.textContent = '';
             
             // Create project cards asynchronously
             Promise.all(filteredProjects.map(createProjectCard)).then(cards => {
@@ -484,60 +498,99 @@
             const statusClass = `status-${project.status}`;
             
             // Get recent bookmarks for this project
-            let recentBookmarksHtml = '<div class="bookmark-item">Loading recent bookmarks...</div>';
+            let recentBookmarksElements = [createSafeHTML('div', 'Loading recent bookmarks...', { class: 'bookmark-item' })];
             try {
                 const response = await fetch(`/api/projects/${encodeURIComponent(project.topic)}`);
                 if (response.ok) {
                     const projectDetail = await response.json();
                     const recentBookmarks = projectDetail.bookmarks.slice(0, 2); // Get first 2 bookmarks
-                    recentBookmarksHtml = recentBookmarks.map(bookmark => `
-                        <div class="bookmark-item">
-                            <div class="bookmark-info">
-                                <div class="bookmark-title-small">${escapeHtml(bookmark.title)}</div>
-                                <div class="bookmark-url-small">${escapeHtml(getDomain(bookmark.url))}</div>
-                            </div>
-                            <div class="bookmark-mini-actions">
-                                <button class="mini-btn" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})" title="Preview">👁️</button>
-                                <button class="mini-btn" onclick="editBookmark(${bookmark.id})" title="Edit">✏️</button>
-                            </div>
-                        </div>
-                    `).join('') || '<div class="bookmark-item">No bookmarks yet</div>';
+                    // Security: Build DOM elements safely instead of using template strings
+                    const bookmarkElements = recentBookmarks.map(bookmark => {
+                        const bookmarkItem = document.createElement('div');
+                        bookmarkItem.className = 'bookmark-item';
+                        
+                        const bookmarkInfo = document.createElement('div');
+                        bookmarkInfo.className = 'bookmark-info';
+                        
+                        const titleDiv = createSafeHTML('div', bookmark.title, { class: 'bookmark-title-small' });
+                        const urlDiv = createSafeHTML('div', getDomain(bookmark.url), { class: 'bookmark-url-small' });
+                        
+                        bookmarkInfo.appendChild(titleDiv);
+                        bookmarkInfo.appendChild(urlDiv);
+                        
+                        const actions = document.createElement('div');
+                        actions.className = 'bookmark-mini-actions';
+                        
+                        const previewBtn = createSafeHTML('button', '👁️', { class: 'mini-btn', title: 'Preview' });
+                        previewBtn.onclick = () => previewBookmark(bookmark.url, bookmark.title, bookmark.id);
+                        
+                        const editBtn = createSafeHTML('button', '✏️', { class: 'mini-btn', title: 'Edit' });
+                        editBtn.onclick = () => editBookmark(bookmark.id);
+                        
+                        actions.appendChild(previewBtn);
+                        actions.appendChild(editBtn);
+                        
+                        bookmarkItem.appendChild(bookmarkInfo);
+                        bookmarkItem.appendChild(actions);
+                        
+                        return bookmarkItem;
+                    });
+                    
+                    // Store DOM elements instead of HTML string
+                    recentBookmarksElements = bookmarkElements.length > 0 ? bookmarkElements : [createSafeHTML('div', 'No bookmarks yet', { class: 'bookmark-item' })];
                 }
             } catch (error) {
                 console.error('Failed to fetch recent bookmarks:', error);
-                recentBookmarksHtml = '<div class="bookmark-item">Failed to load recent bookmarks</div>';
+                recentBookmarksElements = [createSafeHTML('div', 'Failed to load recent bookmarks', { class: 'bookmark-item' })];
             }
             
-            card.innerHTML = `
-                <div class="project-header">
-                    <div>
-                        <div class="project-title">${escapeHtml(project.topic)}</div>
-                    </div>
-                    <div class="project-status ${statusClass}">${project.status}</div>
-                </div>
-                
-                <div class="project-meta">
-                    <span class="link-count">${project.linkCount} links</span>
-                    <span class="last-updated">${formatDate(project.lastUpdated)}</span>
-                </div>
-                
-                <div class="project-actions">
-                    <button class="action-btn view" onclick="event.stopPropagation(); viewProject(${project.id})">
-                        👁️ View
-                    </button>
-                    <button class="action-btn share" onclick="event.stopPropagation(); shareProject(${project.id})">
-                        📤 Share
-                    </button>
-                    <button class="action-btn archive" onclick="event.stopPropagation(); archiveProject(${project.id})">
-                        📦 Archive
-                    </button>
-                </div>
-                
-                <div class="recent-bookmarks">
-                    <div class="recent-title">Recent additions:</div>
-                    ${recentBookmarksHtml}
-                </div>
-            `;
+            // Security: Build DOM structure safely instead of using innerHTML
+            const projectHeader = document.createElement('div');
+            projectHeader.className = 'project-header';
+            
+            const titleSection = document.createElement('div');
+            const projectTitle = createSafeHTML('div', project.topic, { class: 'project-title' });
+            titleSection.appendChild(projectTitle);
+            
+            const projectStatus = createSafeHTML('div', project.status, { class: `project-status ${statusClass}` });
+            
+            projectHeader.appendChild(titleSection);
+            projectHeader.appendChild(projectStatus);
+            
+            const projectMeta = document.createElement('div');
+            projectMeta.className = 'project-meta';
+            projectMeta.appendChild(createSafeHTML('span', `${project.linkCount} links`, { class: 'link-count' }));
+            projectMeta.appendChild(createSafeHTML('span', formatDate(project.lastUpdated), { class: 'last-updated' }));
+            
+            const projectActions = document.createElement('div');
+            projectActions.className = 'project-actions';
+            
+            const viewBtn = createSafeHTML('button', '👁️ View', { class: 'action-btn view' });
+            viewBtn.onclick = (e) => { e.stopPropagation(); viewProject(project.id); };
+            
+            const shareBtn = createSafeHTML('button', '📤 Share', { class: 'action-btn share' });
+            shareBtn.onclick = (e) => { e.stopPropagation(); shareProject(project.id); };
+            
+            const archiveBtn = createSafeHTML('button', '📦 Archive', { class: 'action-btn archive' });
+            archiveBtn.onclick = (e) => { e.stopPropagation(); archiveProject(project.id); };
+            
+            projectActions.appendChild(viewBtn);
+            projectActions.appendChild(shareBtn);
+            projectActions.appendChild(archiveBtn);
+            
+            const recentBookmarks = document.createElement('div');
+            recentBookmarks.className = 'recent-bookmarks';
+            recentBookmarks.appendChild(createSafeHTML('div', 'Recent additions:', { class: 'recent-title' }));
+            
+            // Add recent bookmark elements
+            recentBookmarksElements.forEach(element => {
+                recentBookmarks.appendChild(element);
+            });
+            
+            card.appendChild(projectHeader);
+            card.appendChild(projectMeta);
+            card.appendChild(projectActions);
+            card.appendChild(recentBookmarks);
             
             return card;
         }
@@ -603,11 +656,41 @@
             // In real app: window.location.href = '/';
         }
         
-        // Utility functions
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // Security: HTML escaping function to prevent XSS
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Security: Safe text content setting
+        function setTextContent(element, text) {
+            if (element && typeof text === 'string') {
+                element.textContent = text;
+            }
+        }
+
+        // Security: Safe HTML creation with escaped content
+        function createSafeHTML(tag, content, attributes = {}) {
+            const element = document.createElement(tag);
+            if (content) {
+                element.textContent = content;
+            }
+            for (const [key, value] of Object.entries(attributes)) {
+                if (key === 'href' || key === 'src') {
+                    // Validate URLs for href and src attributes
+                    if (value && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/'))) {
+                        element.setAttribute(key, value);
+                    }
+                } else {
+                    element.setAttribute(key, value);
+                }
+            }
+            return element;
         }
         
         function getDomain(url) {

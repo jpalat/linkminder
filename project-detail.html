@@ -488,8 +488,11 @@
         const projectTopic = urlParams.get('topic');
         
         if (!projectId && !projectTopic) {
-            document.getElementById('content').innerHTML = 
-                '<div class="error">Error: No project specified. Please provide either an ID or topic parameter.</div>';
+            // Security: Use safe DOM manipulation instead of innerHTML
+            const content = document.getElementById('content');
+            content.textContent = '';
+            const errorDiv = createSafeHTML('div', 'Error: No project specified. Please provide either an ID or topic parameter.', { class: 'error' });
+            content.appendChild(errorDiv);
         }
 
         // Initialize the page
@@ -538,8 +541,11 @@
                 
             } catch (error) {
                 console.error('Error loading project data:', error);
-                document.getElementById('content').innerHTML = 
-                    `<div class="error">Error loading project: ${error.message}</div>`;
+                // Security: Use safe DOM manipulation instead of innerHTML
+                const content = document.getElementById('content');
+                content.textContent = '';
+                const errorDiv = createSafeHTML('div', `Error loading project: ${error.message}`, { class: 'error' });
+                content.appendChild(errorDiv);
             }
         }
 
@@ -559,8 +565,10 @@
             const domains = [...new Set(allBookmarks.map(b => b.domain).filter(d => d))].sort();
             const domainFilter = document.getElementById('domainFilter');
             
-            // Clear existing options except "All Domains"
-            domainFilter.innerHTML = '<option value="">All Domains</option>';
+            // Security: Clear existing options safely
+            domainFilter.textContent = '';
+            const allDomainsOption = createSafeHTML('option', 'All Domains', { value: '' });
+            domainFilter.appendChild(allDomainsOption);
             
             domains.forEach(domain => {
                 const option = document.createElement('option');
@@ -584,18 +592,16 @@
                 direction: document.getElementById('sortDirection').value
             };
 
-            // Update sort direction label
+            // Security: Update sort direction options safely
             const sortDirection = document.getElementById('sortDirection');
+            sortDirection.textContent = '';
+            
             if (sort.field === 'timestamp') {
-                sortDirection.innerHTML = `
-                    <option value="desc">Newest First</option>
-                    <option value="asc">Oldest First</option>
-                `;
+                sortDirection.appendChild(createSafeHTML('option', 'Newest First', { value: 'desc' }));
+                sortDirection.appendChild(createSafeHTML('option', 'Oldest First', { value: 'asc' }));
             } else {
-                sortDirection.innerHTML = `
-                    <option value="asc">A to Z</option>
-                    <option value="desc">Z to A</option>
-                `;
+                sortDirection.appendChild(createSafeHTML('option', 'A to Z', { value: 'asc' }));
+                sortDirection.appendChild(createSafeHTML('option', 'Z to A', { value: 'desc' }));
             }
             sortDirection.value = sort.direction;
 
@@ -675,42 +681,88 @@
             const content = document.getElementById('content');
 
             if (filteredBookmarks.length === 0) {
-                content.innerHTML = `
-                    <div class="no-results">
-                        <h3>No bookmarks found</h3>
-                        <p>Try adjusting your filters to see more results.</p>
-                    </div>
-                `;
+                // Security: Use safe DOM manipulation instead of innerHTML
+                content.textContent = '';
+                const noResults = document.createElement('div');
+                noResults.className = 'no-results';
+                noResults.appendChild(createSafeHTML('h3', 'No bookmarks found'));
+                noResults.appendChild(createSafeHTML('p', 'Try adjusting your filters to see more results.'));
+                content.appendChild(noResults);
                 return;
             }
 
-            const bookmarksHTML = filteredBookmarks.map(bookmark => `
-                <div class="bookmark-card">
-                    <div class="bookmark-header">
-                        <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-title">${escapeHtml(bookmark.title)}</a>
-                        <div class="bookmark-status">
-                            ${bookmark.action ? `<span class="action-badge action-${bookmark.action}">${escapeHtml(bookmark.action)}</span>` : ''}
-                        </div>
-                    </div>
-                    
-                    <div class="bookmark-meta">
-                        <span>🌐 ${escapeHtml(bookmark.domain || 'Unknown')}</span>
-                        <span>📅 ${formatDate(bookmark.timestamp)}</span>
-                        <span>⏰ ${escapeHtml(bookmark.age || '')}</span>
-                    </div>
-                    
-                    ${bookmark.description ? `<div class="bookmark-description">${escapeHtml(bookmark.description)}</div>` : ''}
-                    
-                    <a href="${escapeHtml(bookmark.url)}" target="_blank" class="bookmark-url">${escapeHtml(bookmark.url)}</a>
-                    
-                    <div class="bookmark-actions">
-                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
-                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
-                    </div>
-                </div>
-            `).join('');
-
-            content.innerHTML = `<div class="bookmarks-grid">${bookmarksHTML}</div>`;
+            // Security: Build DOM elements safely instead of using template strings
+            const bookmarksGrid = document.createElement('div');
+            bookmarksGrid.className = 'bookmarks-grid';
+            
+            filteredBookmarks.forEach(bookmark => {
+                const bookmarkCard = document.createElement('div');
+                bookmarkCard.className = 'bookmark-card';
+                
+                // Bookmark header
+                const header = document.createElement('div');
+                header.className = 'bookmark-header';
+                
+                const titleLink = createSafeHTML('a', bookmark.title, { 
+                    href: bookmark.url, 
+                    target: '_blank', 
+                    class: 'bookmark-title' 
+                });
+                
+                const status = document.createElement('div');
+                status.className = 'bookmark-status';
+                if (bookmark.action) {
+                    const actionBadge = createSafeHTML('span', bookmark.action, { 
+                        class: `action-badge action-${bookmark.action}` 
+                    });
+                    status.appendChild(actionBadge);
+                }
+                
+                header.appendChild(titleLink);
+                header.appendChild(status);
+                
+                // Bookmark meta
+                const meta = document.createElement('div');
+                meta.className = 'bookmark-meta';
+                meta.appendChild(createSafeHTML('span', `🌐 ${bookmark.domain || 'Unknown'}`));
+                meta.appendChild(createSafeHTML('span', `📅 ${formatDate(bookmark.timestamp)}`));
+                meta.appendChild(createSafeHTML('span', `⏰ ${bookmark.age || ''}`));
+                
+                bookmarkCard.appendChild(header);
+                bookmarkCard.appendChild(meta);
+                
+                // Description (optional)
+                if (bookmark.description) {
+                    bookmarkCard.appendChild(createSafeHTML('div', bookmark.description, { class: 'bookmark-description' }));
+                }
+                
+                // URL link
+                bookmarkCard.appendChild(createSafeHTML('a', bookmark.url, { 
+                    href: bookmark.url, 
+                    target: '_blank', 
+                    class: 'bookmark-url' 
+                }));
+                
+                // Actions
+                const actions = document.createElement('div');
+                actions.className = 'bookmark-actions';
+                
+                const previewBtn = createSafeHTML('button', '👁️ Preview', { class: 'btn btn-preview' });
+                previewBtn.onclick = () => previewBookmark(bookmark.url, bookmark.title, bookmark.id);
+                
+                const editBtn = createSafeHTML('button', '✏️ Edit', { class: 'btn btn-secondary' });
+                editBtn.onclick = () => editBookmark(bookmark.id);
+                
+                actions.appendChild(previewBtn);
+                actions.appendChild(editBtn);
+                bookmarkCard.appendChild(actions);
+                
+                bookmarksGrid.appendChild(bookmarkCard);
+            });
+            
+            // Security: Clear existing content safely and append new content
+            content.textContent = '';
+            content.appendChild(bookmarksGrid);
         }
 
         function updateActiveFilters(filters) {
@@ -755,10 +807,41 @@
             };
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // Security: HTML escaping function to prevent XSS
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Security: Safe text content setting
+        function setTextContent(element, text) {
+            if (element && typeof text === 'string') {
+                element.textContent = text;
+            }
+        }
+
+        // Security: Safe HTML creation with escaped content
+        function createSafeHTML(tag, content, attributes = {}) {
+            const element = document.createElement(tag);
+            if (content) {
+                element.textContent = content;
+            }
+            for (const [key, value] of Object.entries(attributes)) {
+                if (key === 'href' || key === 'src') {
+                    // Validate URLs for href and src attributes
+                    if (value && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/'))) {
+                        element.setAttribute(key, value);
+                    }
+                } else {
+                    element.setAttribute(key, value);
+                }
+            }
+            return element;
         }
 
         function formatDate(dateString) {

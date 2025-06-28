@@ -750,6 +750,43 @@
         let currentEditBookmark = null;
         const triageLimit = 10;
 
+        // Security: HTML escaping function to prevent XSS
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Security: Safe text content setting
+        function setTextContent(element, text) {
+            if (element && typeof text === 'string') {
+                element.textContent = text;
+            }
+        }
+
+        // Security: Safe HTML creation with escaped content
+        function createSafeHTML(tag, content, attributes = {}) {
+            const element = document.createElement(tag);
+            if (content) {
+                element.textContent = content;
+            }
+            for (const [key, value] of Object.entries(attributes)) {
+                if (key === 'href' || key === 'src') {
+                    // Validate URLs for href and src attributes
+                    if (value && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/'))) {
+                        element.setAttribute(key, value);
+                    }
+                } else {
+                    element.setAttribute(key, value);
+                }
+            }
+            return element;
+        }
+
         // API functions
         async function fetchStats() {
             try {
@@ -817,31 +854,62 @@
             loading.style.display = 'none';
 
             if (!data.bookmarks || data.bookmarks.length === 0) {
-                grid.innerHTML = '<div class="empty-state">No items need triage</div>';
+                grid.textContent = '';
+                const emptyDiv = createSafeHTML('div', 'No items need triage', { class: 'empty-state' });
+                grid.appendChild(emptyDiv);
                 grid.style.display = 'block';
                 pagination.style.display = 'none';
                 return;
             }
 
-            grid.innerHTML = data.bookmarks.map(bookmark => `
-                <div class="triage-item">
-                    <div class="triage-info">
-                        <div class="triage-title">${escapeHtml(bookmark.title)}</div>
-                        <div class="triage-meta">
-                            <span>${escapeHtml(bookmark.domain || '')}</span>
-                            <span>${escapeHtml(bookmark.age || '')}</span>
-                            <span>Suggested: ${escapeHtml(bookmark.suggested || '')}</span>
-                        </div>
-                    </div>
-                    <div class="triage-actions">
-                        <button class="btn btn-preview" onclick="previewBookmark('${escapeHtml(bookmark.url)}', '${escapeHtml(bookmark.title).replace(/'/g, '\\\'').replace(/"/g, '\\"')}', ${bookmark.id})">👁️ Preview</button>
-                        <button class="btn btn-secondary" onclick="editBookmark(${bookmark.id})">✏️ Edit</button>
-                        <button class="btn btn-primary" onclick="markAsWorking(${bookmark.id}, '${escapeHtml(bookmark.topic || '').replace(/'/g, '\\\'').replace(/"/g, '\\"')}')">Working</button>
-                        <button class="btn btn-success" onclick="markAsShare(${bookmark.id})">Share</button>
-                        <button class="btn btn-archive" onclick="markAsArchived(${bookmark.id})">Archive</button>
-                    </div>
-                </div>
-            `).join('');
+            // Security: Clear existing content safely and build DOM elements
+            grid.textContent = '';
+            data.bookmarks.forEach(bookmark => {
+                const triageItem = document.createElement('div');
+                triageItem.className = 'triage-item';
+                
+                const triageInfo = document.createElement('div');
+                triageInfo.className = 'triage-info';
+                
+                const title = createSafeHTML('div', bookmark.title, { class: 'triage-title' });
+                
+                const meta = document.createElement('div');
+                meta.className = 'triage-meta';
+                meta.appendChild(createSafeHTML('span', bookmark.domain || ''));
+                meta.appendChild(createSafeHTML('span', bookmark.age || ''));
+                meta.appendChild(createSafeHTML('span', 'Suggested: ' + (bookmark.suggested || '')));
+                
+                triageInfo.appendChild(title);
+                triageInfo.appendChild(meta);
+                
+                const actions = document.createElement('div');
+                actions.className = 'triage-actions';
+                
+                const previewBtn = createSafeHTML('button', '👁️ Preview', { class: 'btn btn-preview' });
+                previewBtn.onclick = () => previewBookmark(bookmark.url, bookmark.title, bookmark.id);
+                
+                const editBtn = createSafeHTML('button', '✏️ Edit', { class: 'btn btn-secondary' });
+                editBtn.onclick = () => editBookmark(bookmark.id);
+                
+                const workingBtn = createSafeHTML('button', 'Working', { class: 'btn btn-primary' });
+                workingBtn.onclick = () => markAsWorking(bookmark.id, bookmark.topic || '');
+                
+                const shareBtn = createSafeHTML('button', 'Share', { class: 'btn btn-success' });
+                shareBtn.onclick = () => markAsShare(bookmark.id);
+                
+                const archiveBtn = createSafeHTML('button', 'Archive', { class: 'btn btn-archive' });
+                archiveBtn.onclick = () => markAsArchived(bookmark.id);
+                
+                actions.appendChild(previewBtn);
+                actions.appendChild(editBtn);
+                actions.appendChild(workingBtn);
+                actions.appendChild(shareBtn);
+                actions.appendChild(archiveBtn);
+                
+                triageItem.appendChild(triageInfo);
+                triageItem.appendChild(actions);
+                grid.appendChild(triageItem);
+            });
 
             grid.style.display = 'block';
 
@@ -859,24 +927,37 @@
                 return;
             }
 
-            let paginationHTML = '';
+            // Security: Clear existing content safely and build DOM elements
+            pagination.textContent = '';
 
             // Previous button
-            paginationHTML += `<button class="page-btn" ${currentPage === 0 ? 'disabled' : ''} onclick="goToTriagePage(${currentPage - 1})">Previous</button>`;
+            const prevBtn = createSafeHTML('button', 'Previous', { class: 'page-btn' });
+            if (currentPage === 0) {
+                prevBtn.disabled = true;
+            } else {
+                prevBtn.onclick = () => goToTriagePage(currentPage - 1);
+            }
+            pagination.appendChild(prevBtn);
 
             // Page numbers
             for (let i = 0; i < totalPages; i++) {
+                const pageBtn = createSafeHTML('button', (i + 1).toString(), { class: 'page-btn' });
                 if (i === currentPage) {
-                    paginationHTML += `<button class="page-btn active">${i + 1}</button>`;
+                    pageBtn.classList.add('active');
                 } else {
-                    paginationHTML += `<button class="page-btn" onclick="goToTriagePage(${i})">${i + 1}</button>`;
+                    pageBtn.onclick = () => goToTriagePage(i);
                 }
+                pagination.appendChild(pageBtn);
             }
 
             // Next button
-            paginationHTML += `<button class="page-btn" ${currentPage === totalPages - 1 ? 'disabled' : ''} onclick="goToTriagePage(${currentPage + 1})">Next</button>`;
-
-            pagination.innerHTML = paginationHTML;
+            const nextBtn = createSafeHTML('button', 'Next', { class: 'page-btn' });
+            if (currentPage === totalPages - 1) {
+                nextBtn.disabled = true;
+            } else {
+                nextBtn.onclick = () => goToTriagePage(currentPage + 1);
+            }
+            pagination.appendChild(nextBtn);
             pagination.style.display = 'flex';
         }
 
@@ -887,20 +968,36 @@
             loading.style.display = 'none';
 
             if (!data.activeProjects || data.activeProjects.length === 0) {
-                grid.innerHTML = '<div class="empty-state">No active projects</div>';
+                grid.textContent = '';
+                const emptyDiv = createSafeHTML('div', 'No active projects', { class: 'empty-state' });
+                grid.appendChild(emptyDiv);
                 grid.style.display = 'block';
                 return;
             }
 
-            grid.innerHTML = data.activeProjects.map(project => `
-                <div class="project-card" onclick="openProjectDetail(${project.id})">
-                    <div class="project-title">${escapeHtml(project.topic)}</div>
-                    <div class="project-meta">
-                        ${project.linkCount} links • Updated ${formatDate(project.lastUpdated)}
-                    </div>
-                    <span class="status-badge status-${project.status}">${project.status}</span>
-                </div>
-            `).join('');
+            // Security: Clear existing content safely and build DOM elements
+            grid.textContent = '';
+            data.activeProjects.forEach(project => {
+                const projectCard = document.createElement('div');
+                projectCard.className = 'project-card';
+                projectCard.onclick = () => openProjectDetail(project.id);
+                
+                const title = createSafeHTML('div', project.topic, { class: 'project-title' });
+                
+                const meta = createSafeHTML('div', 
+                    `${project.linkCount} links • Updated ${formatDate(project.lastUpdated)}`, 
+                    { class: 'project-meta' }
+                );
+                
+                const statusBadge = createSafeHTML('span', project.status, { 
+                    class: `status-badge status-${project.status}` 
+                });
+                
+                projectCard.appendChild(title);
+                projectCard.appendChild(meta);
+                projectCard.appendChild(statusBadge);
+                grid.appendChild(projectCard);
+            });
 
             grid.style.display = 'grid';
         }
