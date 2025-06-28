@@ -1,0 +1,105 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      extension: ${{ steps.changes.outputs.extension }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - '*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'migrations/**'
+            frontend:
+              - 'frontend/**'
+            extension:
+              - 'extension/**'
+
+  full-stack-test:
+    needs: detect-changes
+    if: |
+      always() && (
+        needs.detect-changes.outputs.backend == 'true' || 
+        needs.detect-changes.outputs.frontend == 'true' ||
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Start backend server
+        run: |
+          go run main.go &
+          echo $! > backend.pid
+          sleep 10
+          
+          # Test that server is running
+          curl -f http://localhost:9090/topics || (echo "Backend failed to start" && exit 1)
+          echo "Backend server started successfully"
+      
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "No package-lock.json found, skipping frontend tests"
+          fi
+      
+      - name: Run API integration tests
+        run: |
+          echo "Testing bookmark creation..."
+          curl -X POST http://localhost:9090/bookmark \
+            -H "Content-Type: application/json" \
+            -d '{"url": "https://example.com", "title": "Test Bookmark", "action": "read-later"}' \
+            -f || (echo "Bookmark creation failed" && exit 1)
+          
+          echo "Testing topics retrieval..."
+          curl -f http://localhost:9090/topics || (echo "Topics retrieval failed" && exit 1)
+          
+          echo "Testing stats endpoint..."
+          curl -f http://localhost:9090/api/stats/summary || (echo "Stats endpoint failed" && exit 1)
+          
+          echo "All API integration tests passed"
+      
+      - name: Test database operations
+        run: |
+          echo "Testing database file creation..."
+          test -f bookmarks.db || (echo "Database file not created" && exit 1)
+          
+          echo "Testing database queries..."
+          go run -c 'package main; import ("database/sql"; _ "github.com/mattn/go-sqlite3"); func main() { db, err := sql.Open("sqlite3", "bookmarks.db"); if err != nil { panic(err) }; defer db.Close(); var count int; db.QueryRow("SELECT COUNT(*) FROM bookmarks").Scan(&count); println("Bookmarks count:", count) }'
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          [[ -f backend.pid ]] && kill $(cat backend.pid) || true
+          echo "Integration tests completed"

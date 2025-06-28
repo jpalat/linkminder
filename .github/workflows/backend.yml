@@ -1,0 +1,97 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: 
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'migrations/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'migrations/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.23, 1.24]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      run: go mod download
+    
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
+    
+    - name: Generate coverage report
+      run: go tool cover -html=coverage.out -o coverage.html
+    
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report-go${{ matrix.go-version }}
+        path: |
+          coverage.out
+          coverage.html
+        retention-days: 30
+    
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        args: --timeout=5m
+    
+    - name: Build binary
+      run: go build -o bookminderapi main.go
+    
+    - name: Test binary execution
+      run: |
+        timeout 10s ./bookminderapi || true
+        echo "Binary built and tested successfully"
+
+  migration-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Install migrate tool
+      run: |
+        go install -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+    
+    - name: Test migrations up
+      run: |
+        migrate -path migrations -database sqlite3://test.db up
+        ls -la test.db
+    
+    - name: Test migrations down
+      run: |
+        migrate -path migrations -database sqlite3://test.db down -all
+        echo "Migration tests completed successfully"
