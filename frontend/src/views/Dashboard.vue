@@ -251,10 +251,15 @@
 </template>
 
 <script setup lang="ts">
+import { defineOptions } from 'vue'
 import { ref, computed, onMounted } from 'vue'
+
+defineOptions({
+  name: 'DashboardView'
+})
 import { storeToRefs } from 'pinia'
 import { useBookmarkStore } from '@/stores/bookmarks'
-import type { TabType } from '@/types'
+import type { TabType, ProjectStat, Bookmark } from '@/types'
 
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
@@ -405,7 +410,7 @@ const handleMoveToProject = async (bookmarkId: string, topic: string) => {
   }
 }
 
-const handleProjectExport = (project: any) => {
+const handleProjectExport = (project: ProjectStat) => {
   // Simple CSV export functionality
   const csvContent = `Project: ${project.topic}\nLinks: ${project.count}\nStatus: ${project.status}\nLast Updated: ${project.lastUpdated}\n\nExported at: ${new Date().toISOString()}`
   
@@ -460,7 +465,7 @@ const handleShareBookmarks = async (shareData: { destination: string; notes?: st
   }
 }
 
-const handleAddBookmark = async (bookmarkData: any) => {
+const handleAddBookmark = async (bookmarkData: Omit<Bookmark, 'id' | 'timestamp'>) => {
   try {
     // Add the bookmark to the store
     await addBookmark(bookmarkData)

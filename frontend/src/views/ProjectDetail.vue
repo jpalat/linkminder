@@ -575,7 +575,7 @@ const bulkAction = async (action: string) => {
   const bookmarkIds = Array.from(selectedBookmarks.value)
   try {
     await Promise.all(bookmarkIds.map(id => 
-      bookmarkStore.updateBookmark(id, { action: action as any })
+      bookmarkStore.updateBookmark(id, { action })
     ))
     selectedBookmarks.value.clear()
     await loadProjectData()
@@ -620,7 +620,7 @@ const performDeleteBookmark = async (bookmarkId: string) => {
   }
 }
 
-const handleAddBookmark = async (bookmark: any) => {
+const handleAddBookmark = async (bookmark: Omit<Bookmark, 'id' | 'timestamp'>) => {
   try {
     await bookmarkStore.addBookmark({
       ...bookmark,
