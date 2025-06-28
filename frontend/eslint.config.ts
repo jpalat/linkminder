@@ -22,7 +22,8 @@ export default defineConfigWithVueTs(
     '**/*.test.ts',
     '**/*.test.js',
     '**/*.spec.ts',
-    '**/*.spec.js'
+    '**/*.spec.js',
+    '**/test-setup.ts'
   ]),
 
   pluginVue.configs['flat/essential'],
