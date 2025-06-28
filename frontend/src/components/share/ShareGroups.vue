@@ -45,7 +45,7 @@
           <div class="group-copy-title">📋 Copy All {{ group.destination }} Items</div>
           <div class="group-copy-formats">
             <button 
-              v-for="format in getGroupFormats(group.destination)" 
+              v-for="format in getGroupFormats()" 
               :key="format.key"
               class="group-copy-btn" 
               @click="copyGroupItems(group, format.key)"
