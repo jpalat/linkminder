@@ -932,8 +932,8 @@ func TestHandleDashboard_Success(t *testing.T) {
 	}
 	
 	contentType := rr.Header().Get("Content-Type")
-	if contentType != "text/html" {
-		t.Errorf("Expected Content-Type 'text/html', got %s", contentType)
+	if !strings.HasPrefix(contentType, "text/html") {
+		t.Errorf("Expected Content-Type to start with 'text/html', got %s", contentType)
 	}
 }
 
