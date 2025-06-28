@@ -57,13 +57,37 @@ jobs:
       
       - name: Start backend server
         run: |
-          go run main.go &
-          echo $! > backend.pid
-          sleep 10
+          echo "Installing Go dependencies..."
+          go mod download
           
-          # Test that server is running
-          curl -f http://localhost:9090/topics || (echo "Backend failed to start" && exit 1)
-          echo "Backend server started successfully"
+          echo "Starting backend server..."
+          go run main.go &
+          SERVER_PID=$!
+          echo $SERVER_PID > backend.pid
+          
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -f http://localhost:9090/topics >/dev/null 2>&1; then
+              echo "Backend server started successfully on attempt $i"
+              exit 0
+            fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server process died unexpectedly"
+              echo "Checking for common issues..."
+              echo "Port 9090 status:"
+              netstat -tuln | grep 9090 || echo "Port 9090 not in use"
+              exit 1
+            fi
+            echo "Attempt $i: Server not ready yet, waiting 2 seconds..."
+            sleep 2
+          done
+          
+          echo "Server failed to start after 60 seconds"
+          echo "Final check - is process still running?"
+          kill -0 $SERVER_PID 2>/dev/null && echo "Process is running" || echo "Process is dead"
+          echo "Trying one more curl attempt..."
+          curl -v http://localhost:9090/topics || true
+          exit 1
       
       - name: Install frontend dependencies
         working-directory: ./frontend
@@ -101,5 +125,24 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          [[ -f backend.pid ]] && kill $(cat backend.pid) || true
+          echo "Stopping backend server..."
+          if [[ -f backend.pid ]]; then
+            SERVER_PID=$(cat backend.pid)
+            if kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Killing server process $SERVER_PID"
+              kill $SERVER_PID || true
+              sleep 2
+              # Force kill if still running
+              kill -9 $SERVER_PID 2>/dev/null || true
+            else
+              echo "Server process $SERVER_PID was not running"
+            fi
+          else
+            echo "No backend.pid file found"
+          fi
+          
+          # Kill any remaining Go processes
+          pkill -f "go run main.go" || true
+          pkill -f "main.go" || true
+          
           echo "Integration tests completed"
