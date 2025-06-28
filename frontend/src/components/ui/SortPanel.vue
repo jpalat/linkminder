@@ -17,8 +17,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-
 interface SortOption {
   key: string
   label: string
@@ -29,7 +27,7 @@ interface Props {
   currentSort?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   currentSort: 'date-desc'
 })
 
