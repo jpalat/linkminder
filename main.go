@@ -2699,7 +2699,8 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodDelete {
+	switch r.Method {
+	case http.MethodDelete:
 		// Handle bookmark soft delete (DELETE)
 		log.Printf("Soft deleting bookmark: %d", bookmarkID)
 		logStructured("INFO", "api", "Bookmark soft delete request", map[string]interface{}{
@@ -2730,12 +2731,14 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"message": "Bookmark deleted successfully",
 			"id":      bookmarkID,
-		})
+		}); err != nil {
+			log.Printf("Failed to encode JSON response: %v", err)
+		}
 		return
-	} else if r.Method == http.MethodPut {
+	case http.MethodPut:
 		// Handle full bookmark update (PUT)
 		var req BookmarkFullUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2766,7 +2769,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to update bookmark", http.StatusInternalServerError)
 			return
 		}
-	} else {
+	case http.MethodPatch:
 		// Handle partial bookmark update (PATCH)
 		var req BookmarkUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
