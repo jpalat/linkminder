@@ -31,6 +31,7 @@
         @move-to-working="$emit('move-to-working', $event)"
         @move-to-share="$emit('move-to-share', $event)"
         @archive="$emit('archive', $event)"
+        @delete="$emit('delete', $event)"
         @click="handleBookmarkClick"
       />
     </TransitionGroup>
@@ -66,6 +67,7 @@ const emit = defineEmits<{
   'move-to-working': [id: string]
   'move-to-share': [id: string]
   'archive': [id: string]
+  'delete': [id: string]
   'bookmark-click': [bookmark: Bookmark]
 }>()
 

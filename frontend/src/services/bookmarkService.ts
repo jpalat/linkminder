@@ -130,6 +130,14 @@ class BookmarkService {
   }
 
   /**
+   * Soft delete a bookmark
+   * DELETE /api/bookmarks/{id}
+   */
+  async deleteBookmark(id: string): Promise<void> {
+    await apiClient.delete(`/api/bookmarks/${id}`)
+  }
+
+  /**
    * Get bookmarks needing triage
    * GET /api/bookmarks/triage
    */
