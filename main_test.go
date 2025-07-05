@@ -3806,7 +3806,7 @@ func TestBookmarkUpdate_ErrorHandling(t *testing.T) {
 		})
 
 		t.Run("Should reject unsupported HTTP methods", func(t *testing.T) {
-			req := httptest.NewRequest("DELETE", "/api/bookmarks/1", nil)
+			req := httptest.NewRequest("HEAD", "/api/bookmarks/1", nil)
 			rr := httptest.NewRecorder()
 			
 			handleBookmarkUpdate(rr, req)
