@@ -85,6 +85,13 @@
       >
         Archive
       </AppButton>
+      <AppButton
+        size="xs"
+        variant="danger"
+        @click.stop="$emit('delete', bookmark.id)"
+      >
+        🗑️
+      </AppButton>
     </div>
   </div>
 </template>
@@ -111,6 +118,7 @@ const emit = defineEmits<{
   'move-to-working': [id: string]
   'move-to-share': [id: string]
   'archive': [id: string]
+  'delete': [id: string]
   'click': [bookmark: Bookmark]
 }>()
 
