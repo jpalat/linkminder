@@ -325,6 +325,56 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     }
   }
 
+  const deleteBookmark = async (bookmarkId: string) => {
+    try {
+      // Call API to soft delete
+      await bookmarkService.deleteBookmark(bookmarkId)
+      
+      // Remove from local state
+      const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
+      if (index !== -1) {
+        const deletedBookmark = bookmarks.value[index]
+        bookmarks.value.splice(index, 1)
+        
+        // Show success notification
+        const { bookmarkDeleted } = useNotifications()
+        bookmarkDeleted(deletedBookmark.title)
+        console.log('Successfully deleted bookmark:', deletedBookmark.title)
+      }
+    } catch (err) {
+      error.value = getErrorDisplayMessage(err)
+      console.error('Error deleting bookmark:', err)
+      
+      // Show error notification
+      apiError('delete bookmark', err as Error)
+      
+      if (isNetworkError(err)) {
+        isConnected.value = false
+      }
+      
+      throw err // Re-throw for component error handling
+    }
+  }
+
+  const deleteBookmarks = async (bookmarkIds: string[]) => {
+    try {
+      // Delete each bookmark
+      const promises = bookmarkIds.map(id => deleteBookmark(id))
+      await Promise.all(promises)
+      
+      // Show bulk operation notification
+      const count = bookmarkIds.length
+      if (count > 1) {
+        bulkOperation(count, 'deleted')
+      }
+      
+      clearSelection()
+    } catch (err) {
+      console.error('Error in bulk delete operation:', err)
+      apiError('delete bookmarks', err as Error)
+    }
+  }
+
   const loadBookmarks = async () => {
     loading.value = true
     error.value = null
@@ -437,6 +487,8 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     toggleBatchMode,
     updateBookmark,
     moveBookmarks,
+    deleteBookmark,
+    deleteBookmarks,
     loadBookmarks,
     addBookmark,
     setSortOrder,
