@@ -392,6 +392,8 @@ func createTestTablesWithMigrations(testDB *sql.DB) error {
 		// Migration 5: Add tags and custom_properties columns
 		`ALTER TABLE bookmarks ADD COLUMN tags TEXT DEFAULT '[]'`,
 		`ALTER TABLE bookmarks ADD COLUMN custom_properties TEXT DEFAULT '{}'`,
+		// Migration 6: Add deleted column for soft delete
+		`ALTER TABLE bookmarks ADD COLUMN deleted BOOLEAN DEFAULT FALSE`,
 	}
 
 	for i, migration := range migrations {
