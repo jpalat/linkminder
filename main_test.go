@@ -61,7 +61,8 @@ func setupTestDB(t *testing.T) *TestDB {
 		topic TEXT,
 		project_id INTEGER REFERENCES projects(id),
 		tags TEXT DEFAULT '[]',
-		custom_properties TEXT DEFAULT '{}'
+		custom_properties TEXT DEFAULT '{}',
+		deleted BOOLEAN DEFAULT FALSE
 	);`
 	
 	if _, err = db.Exec(createBookmarksTableSQL); err != nil {
@@ -4836,6 +4837,216 @@ func TestSaveBookmarkToDB_AdditionalErrorCases(t *testing.T) {
 			t.Logf("Expected behavior: Long title caused error: %v", err)
 		} else {
 			t.Logf("Long title saved successfully")
+		}
+	})
+}
+
+// Soft Delete Tests
+
+func TestSoftDelete_DeleteBookmark(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Create a test bookmark
+		req := BookmarkRequest{
+			URL:   "https://example.com/test",
+			Title: "Test Bookmark",
+		}
+		
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Fatalf("Failed to save bookmark: %v", err)
+		}
+		
+		// Get the bookmark ID
+		var bookmarkID int
+		err = tdb.db.QueryRow("SELECT id FROM bookmarks WHERE url = ?", req.URL).Scan(&bookmarkID)
+		if err != nil {
+			t.Fatalf("Failed to get bookmark ID: %v", err)
+		}
+		
+		// Test DELETE endpoint
+		deleteReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/bookmarks/%d", bookmarkID), nil)
+		w := httptest.NewRecorder()
+		
+		handleBookmarkUpdate(w, deleteReq)
+		
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+		
+		// Verify bookmark is marked as deleted
+		var deleted bool
+		err = tdb.db.QueryRow("SELECT deleted FROM bookmarks WHERE id = ?", bookmarkID).Scan(&deleted)
+		if err != nil {
+			t.Fatalf("Failed to check deleted status: %v", err)
+		}
+		
+		if !deleted {
+			t.Error("Bookmark should be marked as deleted")
+		}
+	})
+}
+
+func TestSoftDelete_DeleteNonExistentBookmark(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test DELETE endpoint with non-existent ID
+		deleteReq := httptest.NewRequest("DELETE", "/api/bookmarks/999", nil)
+		w := httptest.NewRecorder()
+		
+		handleBookmarkUpdate(w, deleteReq)
+		
+		if w.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", w.Code)
+		}
+	})
+}
+
+func TestSoftDelete_FilterDeletedFromQueries(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		var err error
+		// Create test bookmarks
+		bookmarks := []BookmarkRequest{
+			{URL: "https://example.com/1", Title: "Active Bookmark 1"},
+			{URL: "https://example.com/2", Title: "Active Bookmark 2"},
+			{URL: "https://example.com/3", Title: "To Delete Bookmark"},
+		}
+		
+		for _, bookmark := range bookmarks {
+			err = saveBookmarkToDB(bookmark)
+			if err != nil {
+				t.Fatalf("Failed to save bookmark: %v", err)
+			}
+		}
+		
+		// Mark one bookmark as deleted
+		_, err = tdb.db.Exec("UPDATE bookmarks SET deleted = TRUE WHERE url = ?", "https://example.com/3")
+		if err != nil {
+			t.Fatalf("Failed to mark bookmark as deleted: %v", err)
+		}
+		
+		// Test that deleted bookmarks are filtered out
+		_, err = getTopicsFromDB()
+		if err != nil {
+			t.Fatalf("Failed to get topics: %v", err)
+		}
+		
+		// Should only see 2 bookmarks in results
+		var totalCount int
+		err = tdb.db.QueryRow("SELECT COUNT(*) FROM bookmarks WHERE deleted = FALSE OR deleted IS NULL").Scan(&totalCount)
+		if err != nil {
+			t.Fatalf("Failed to count non-deleted bookmarks: %v", err)
+		}
+		
+		if totalCount != 2 {
+			t.Errorf("Expected 2 non-deleted bookmarks, got %d", totalCount)
+		}
+	})
+}
+
+func TestSoftDelete_StatsExcludeDeleted(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		var err error
+		// Create test bookmarks with different actions
+		bookmarks := []BookmarkRequest{
+			{URL: "https://example.com/1", Title: "Read Later 1", Action: "read-later"},
+			{URL: "https://example.com/2", Title: "Read Later 2", Action: "read-later"},
+			{URL: "https://example.com/3", Title: "Working 1", Action: "working", Topic: "Test Project"},
+			{URL: "https://example.com/4", Title: "Share 1", Action: "share"},
+			{URL: "https://example.com/5", Title: "Deleted Bookmark", Action: "read-later"},
+		}
+		
+		for _, bookmark := range bookmarks {
+			err = saveBookmarkToDB(bookmark)
+			if err != nil {
+				t.Fatalf("Failed to save bookmark: %v", err)
+			}
+		}
+		
+		// Mark one bookmark as deleted
+		_, err = tdb.db.Exec("UPDATE bookmarks SET deleted = TRUE WHERE url = ?", "https://example.com/5")
+		if err != nil {
+			t.Fatalf("Failed to mark bookmark as deleted: %v", err)
+		}
+		
+		// Test stats API
+		req := httptest.NewRequest("GET", "/api/stats/summary", nil)
+		w := httptest.NewRecorder()
+		
+		handleStatsSummary(w, req)
+		
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+		
+		var stats map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &stats)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal stats response: %v", err)
+		}
+		
+		// Check that deleted bookmarks are excluded from stats
+		totalBookmarks := int(stats["totalBookmarks"].(float64))
+		if totalBookmarks != 4 {
+			t.Errorf("Expected 4 total bookmarks (excluding deleted), got %d", totalBookmarks)
+		}
+		
+		needsTriage := int(stats["needsTriage"].(float64))
+		if needsTriage != 2 {
+			t.Errorf("Expected 2 bookmarks needing triage (excluding deleted), got %d", needsTriage)
+		}
+	})
+}
+
+func TestSoftDelete_ProjectDetailExcludesDeleted(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		var err error
+		// Create a test project
+		tdb.createTestProject(t, "Test Project", "A test project", "active")
+		
+		// Create test bookmarks for the project
+		bookmarks := []BookmarkRequest{
+			{URL: "https://example.com/1", Title: "Active Bookmark 1", Action: "working", Topic: "Test Project"},
+			{URL: "https://example.com/2", Title: "Active Bookmark 2", Action: "working", Topic: "Test Project"},
+			{URL: "https://example.com/3", Title: "Deleted Bookmark", Action: "working", Topic: "Test Project"},
+		}
+		
+		for _, bookmark := range bookmarks {
+			err = saveBookmarkToDB(bookmark)
+			if err != nil {
+				t.Fatalf("Failed to save bookmark: %v", err)
+			}
+		}
+		
+		// Mark one bookmark as deleted
+		_, err = tdb.db.Exec("UPDATE bookmarks SET deleted = TRUE WHERE url = ?", "https://example.com/3")
+		if err != nil {
+			t.Fatalf("Failed to mark bookmark as deleted: %v", err)
+		}
+		
+		// Test project detail API
+		req := httptest.NewRequest("GET", "/api/projects/Test%20Project", nil)
+		w := httptest.NewRecorder()
+		
+		handleProjectDetail(w, req)
+		
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+		
+		var projectDetail map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &projectDetail)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal project detail response: %v", err)
+		}
+		
+		// Check that deleted bookmarks are excluded
+		linkCount := int(projectDetail["linkCount"].(float64))
+		if linkCount != 2 {
+			t.Errorf("Expected 2 links (excluding deleted), got %d", linkCount)
+		}
+		
+		bookmarks_response := projectDetail["bookmarks"].([]interface{})
+		if len(bookmarks_response) != 2 {
+			t.Errorf("Expected 2 bookmarks in response (excluding deleted), got %d", len(bookmarks_response))
 		}
 	})
 }

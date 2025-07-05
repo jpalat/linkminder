@@ -362,6 +362,7 @@ func main() {
 	log.Printf("  GET /api/projects/id/{id} - Get detailed view of a project by ID")
 	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark (partial)")
 	log.Printf("  PUT /api/bookmarks/{id} - Update a bookmark (full)")
+	log.Printf("  DELETE /api/bookmarks/{id} - Soft delete a bookmark")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -906,7 +907,7 @@ func getTopicsFromDB() ([]string, error) {
 	
 	logStructured("INFO", "database", "Querying topics", nil)
 	
-	querySQL := `SELECT DISTINCT topic FROM bookmarks WHERE topic IS NOT NULL AND topic != '' ORDER BY topic`
+	querySQL := `SELECT DISTINCT topic FROM bookmarks WHERE topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL) ORDER BY topic`
 	
 	rows, err := db.Query(querySQL)
 	if err != nil {
@@ -1009,7 +1010,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	stats := &SummaryStats{}
 	
 	// Get total bookmarks count
-	err := db.QueryRow("SELECT COUNT(*) FROM bookmarks").Scan(&stats.TotalBookmarks)
+	err := db.QueryRow("SELECT COUNT(*) FROM bookmarks WHERE deleted = FALSE OR deleted IS NULL").Scan(&stats.TotalBookmarks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count total bookmarks: %v", err)
 	}
@@ -1018,7 +1019,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	// needsTriage: bookmarks with no action or action = "read-later"
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM bookmarks 
-		WHERE action IS NULL OR action = '' OR action = 'read-later'
+		WHERE (action IS NULL OR action = '' OR action = 'read-later') AND (deleted = FALSE OR deleted IS NULL)
 	`).Scan(&stats.NeedsTriage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count needs triage: %v", err)
@@ -1027,7 +1028,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	// activeProjects: unique topics in "working" action
 	err = db.QueryRow(`
 		SELECT COUNT(DISTINCT topic) FROM bookmarks 
-		WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+		WHERE action = 'working' AND topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL)
 	`).Scan(&stats.ActiveProjects)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count active projects: %v", err)
@@ -1036,7 +1037,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	// readyToShare: bookmarks with action = "share"
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM bookmarks 
-		WHERE action = 'share'
+		WHERE action = 'share' AND (deleted = FALSE OR deleted IS NULL)
 	`).Scan(&stats.ReadyToShare)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count ready to share: %v", err)
@@ -1045,7 +1046,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	// archived: bookmarks with action = "archived"
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM bookmarks 
-		WHERE action = 'archived'
+		WHERE action = 'archived' AND (deleted = FALSE OR deleted IS NULL)
 	`).Scan(&stats.Archived)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count archived: %v", err)
@@ -1084,17 +1085,19 @@ func getProjectStats() ([]ProjectStat, error) {
 				COUNT(*) as count,
 				MAX(timestamp) as lastUpdated
 			FROM bookmarks 
-			WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+			WHERE action = 'working' AND topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL)
 			GROUP BY topic
 		) stats
 		LEFT JOIN bookmarks latest ON stats.topic = latest.topic 
 			AND latest.timestamp = stats.lastUpdated
 			AND latest.action = 'working'
+			AND (latest.deleted = FALSE OR latest.deleted IS NULL)
 			AND latest.id = (
 				SELECT MAX(id) FROM bookmarks b 
 				WHERE b.topic = stats.topic 
 				AND b.timestamp = stats.lastUpdated 
 				AND b.action = 'working'
+				AND (b.deleted = FALSE OR b.deleted IS NULL)
 			)
 		ORDER BY stats.lastUpdated DESC
 		LIMIT 10
@@ -1296,7 +1299,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	var total int
 	countSQL := `
 		SELECT COUNT(*) FROM bookmarks 
-		WHERE action IS NULL OR action = '' OR action = 'read-later'
+		WHERE (action IS NULL OR action = '' OR action = 'read-later') AND (deleted = FALSE OR deleted IS NULL)
 	`
 	
 	err := db.QueryRow(countSQL).Scan(&total)
@@ -1308,7 +1311,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	querySQL := `
 		SELECT id, url, title, description, timestamp, topic 
 		FROM bookmarks 
-		WHERE action IS NULL OR action = '' OR action = 'read-later'
+		WHERE (action IS NULL OR action = '' OR action = 'read-later') AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
 	`
@@ -1412,7 +1415,7 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 
 	// First get the total count
 	var total int
-	countSQL := `SELECT COUNT(*) FROM bookmarks WHERE action = ?`
+	countSQL := `SELECT COUNT(*) FROM bookmarks WHERE action = ? AND (deleted = FALSE OR deleted IS NULL)`
 	
 	err := db.QueryRow(countSQL, action).Scan(&total)
 	if err != nil {
@@ -1423,7 +1426,7 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 	querySQL := `
 		SELECT id, url, title, description, timestamp, topic, shareTo, tags, custom_properties
 		FROM bookmarks 
-		WHERE action = ?
+		WHERE action = ? AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
 	`
@@ -1891,7 +1894,7 @@ func getProjectByID(projectID int) (*Project, error) {
 		SELECT p.id, p.name, p.description, p.status, p.created_at, p.updated_at,
 		       COUNT(b.id) as link_count
 		FROM projects p
-		LEFT JOIN bookmarks b ON (p.name = b.topic OR p.id = b.project_id) AND b.action = 'working'
+		LEFT JOIN bookmarks b ON (p.name = b.topic OR p.id = b.project_id) AND b.action = 'working' AND (b.deleted = FALSE OR b.deleted IS NULL)
 		WHERE p.id = ?
 		GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.updated_at
 	`, projectID).Scan(
@@ -2050,7 +2053,7 @@ func getActiveProjects() ([]ActiveProject, error) {
 			COUNT(b.id) as linkCount,
 			COALESCE(MAX(b.timestamp), p.updated_at) as lastUpdated
 		FROM projects p
-		LEFT JOIN bookmarks b ON (b.project_id = p.id OR b.topic = p.name)
+		LEFT JOIN bookmarks b ON (b.project_id = p.id OR b.topic = p.name) AND (b.deleted = FALSE OR b.deleted IS NULL)
 		WHERE p.status = 'active'
 		GROUP BY p.id, p.name, p.updated_at
 		HAVING COUNT(b.id) > 0
@@ -2123,10 +2126,10 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 			COUNT(*) as linkCount,
 			MAX(timestamp) as lastAccessed
 		FROM bookmarks 
-		WHERE topic IS NOT NULL AND topic != '' 
+		WHERE topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL)
 		AND topic NOT IN (
 			SELECT DISTINCT topic FROM bookmarks 
-			WHERE action = 'working' AND topic IS NOT NULL AND topic != ''
+			WHERE action = 'working' AND topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL)
 		)
 		GROUP BY topic
 		ORDER BY COUNT(*) DESC, MAX(timestamp) DESC
@@ -2337,7 +2340,7 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 	err := db.QueryRow(`
 		SELECT COUNT(*), MAX(timestamp) 
 		FROM bookmarks 
-		WHERE topic = ? AND action = 'working'
+		WHERE topic = ? AND action = 'working' AND (deleted = FALSE OR deleted IS NULL)
 	`, topic).Scan(&linkCount, &nullableLastUpdated)
 	
 	if err != nil && err != sql.ErrNoRows {
@@ -2354,7 +2357,7 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 		err = db.QueryRow(`
 			SELECT COUNT(*), MAX(timestamp) 
 			FROM bookmarks 
-			WHERE topic = ?
+			WHERE topic = ? AND (deleted = FALSE OR deleted IS NULL)
 		`, topic).Scan(&linkCount, &nullableLastUpdated)
 		
 		if err != nil {
@@ -2415,7 +2418,7 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 	querySQL := `
 		SELECT id, url, title, description, content, timestamp, action
 		FROM bookmarks 
-		WHERE topic = ?
+		WHERE topic = ? AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 	`
 	
@@ -2581,7 +2584,7 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 	querySQL := `
 		SELECT id, url, title, description, content, timestamp, action
 		FROM bookmarks 
-		WHERE project_id = ?
+		WHERE project_id = ? AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 	`
 	
@@ -2664,11 +2667,11 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		"remote_addr": r.RemoteAddr,
 	})
 	
-	if r.Method != http.MethodPatch && r.Method != http.MethodPut {
-		log.Printf("Method not allowed: %s (expected PATCH or PUT)", r.Method)
+	if r.Method != http.MethodPatch && r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		log.Printf("Method not allowed: %s (expected PATCH, PUT, or DELETE)", r.Method)
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
-			"expected": "PATCH or PUT",
+			"expected": "PATCH, PUT, or DELETE",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -2696,7 +2699,43 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodPut {
+	if r.Method == http.MethodDelete {
+		// Handle bookmark soft delete (DELETE)
+		log.Printf("Soft deleting bookmark: %d", bookmarkID)
+		logStructured("INFO", "api", "Bookmark soft delete request", map[string]interface{}{
+			"id": bookmarkID,
+		})
+
+		if err := softDeleteBookmarkInDB(bookmarkID); err != nil {
+			if err == sql.ErrNoRows {
+				log.Printf("Bookmark not found: %d", bookmarkID)
+				logStructured("WARN", "api", "Bookmark not found", map[string]interface{}{
+					"id": bookmarkID,
+				})
+				http.Error(w, "Bookmark not found", http.StatusNotFound)
+				return
+			}
+			log.Printf("Failed to soft delete bookmark: %v", err)
+			logStructured("ERROR", "database", "Failed to soft delete bookmark", map[string]interface{}{
+				"error": err.Error(),
+				"id":    bookmarkID,
+			})
+			http.Error(w, "Failed to delete bookmark", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("Successfully soft deleted bookmark: %d", bookmarkID)
+		logStructured("INFO", "database", "Bookmark soft deleted successfully", map[string]interface{}{
+			"id": bookmarkID,
+		})
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Bookmark deleted successfully",
+			"id":      bookmarkID,
+		})
+		return
+	} else if r.Method == http.MethodPut {
 		// Handle full bookmark update (PUT)
 		var req BookmarkFullUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2796,7 +2835,7 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 	err := db.QueryRow(`
 		SELECT id, url, title, description, content, timestamp, action, topic, shareTo, tags, custom_properties
 		FROM bookmarks 
-		WHERE id = ?`, id).Scan(
+		WHERE id = ? AND (deleted = FALSE OR deleted IS NULL)`, id).Scan(
 		&bookmark.ID,
 		&bookmark.URL,
 		&bookmark.Title,
@@ -3031,6 +3070,45 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 	
 	log.Printf("Successfully updated bookmark with ID: %d", id)
 	logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
+		"id":           id,
+		"rowsAffected": rowsAffected,
+	})
+	
+	return nil
+}
+
+func softDeleteBookmarkInDB(id int) error {
+	log.Printf("Soft deleting bookmark in database: %d", id)
+	
+	logStructured("INFO", "database", "Soft deleting bookmark", map[string]interface{}{
+		"id": id,
+	})
+	
+	// Validate database connection first
+	if err := validateDB(); err != nil {
+		return fmt.Errorf("failed to validate database connection: %v", err)
+	}
+	
+	// Update the bookmark to mark it as deleted
+	result, err := db.Exec("UPDATE bookmarks SET deleted = TRUE WHERE id = ? AND (deleted = FALSE OR deleted IS NULL)", id)
+	if err != nil {
+		logStructured("ERROR", "database", "Failed to soft delete bookmark", map[string]interface{}{
+			"error": err.Error(),
+			"id":    id,
+		})
+		return fmt.Errorf("failed to soft delete bookmark: %v", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %v", err)
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	logStructured("INFO", "database", "Bookmark soft deleted", map[string]interface{}{
 		"id":           id,
 		"rowsAffected": rowsAffected,
 	})
