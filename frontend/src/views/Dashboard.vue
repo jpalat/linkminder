@@ -95,6 +95,7 @@
                 @move-to-working="handleMoveToWorking"
                 @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
+                @delete="handleDeleteBookmark"
               />
             </div>
           </div>
@@ -178,6 +179,7 @@
                 @move-to-working="handleMoveToWorking"
                 @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
+                @delete="handleDeleteBookmark"
               />
             </div>
           </div>
@@ -260,6 +262,7 @@ defineOptions({
 import { storeToRefs } from 'pinia'
 import { useBookmarkStore } from '@/stores/bookmarks'
 import type { TabType, ProjectStat, Bookmark, BookmarkAction } from '@/types'
+import { useNotifications } from '@/composables/useNotifications'
 
 interface BookmarkFormData {
   url: string
@@ -310,7 +313,9 @@ const {
   setSortOrder,
   addBookmark,
   updateBookmark,
-  loadDashboardStats
+  loadDashboardStats,
+  deleteBookmark,
+  deleteBookmarks
 } = bookmarkStore
 
 // Local state
@@ -327,6 +332,9 @@ const bookmarksToShare = ref<Bookmark[]>([])
 const confirmConfig = ref<ConfirmationConfig>({ type: 'custom' })
 const isProcessingConfirm = ref(false)
 const pendingConfirmAction = ref<(() => void) | null>(null)
+
+// Add notifications
+const { bookmarkDeleted, bulkOperation, apiError } = useNotifications()
 
 // Computed
 const tabs = computed(() => [
@@ -514,15 +522,15 @@ const handleDeleteBookmark = (bookmarkId: string) => {
     isDestructive: true
   }
   
-  pendingConfirmAction.value = () => {
-    // Remove from bookmarks array (this would be an API call in real implementation)
-    const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
-    if (index !== -1) {
-      bookmarks.value.splice(index, 1)
+  pendingConfirmAction.value = async () => {
+    try {
+      await deleteBookmark(bookmarkId)
+      showEditModal.value = false
+      bookmarkDeleted(bookmark.title)
+    } catch (error) {
+      console.error('Failed to delete bookmark:', error)
+      apiError('delete bookmark', error as Error)
     }
-    showEditModal.value = false
-    console.log('Deleted bookmark:', bookmarkId)
-    // TODO: Show success notification
   }
   
   showConfirmModal.value = true
@@ -543,17 +551,15 @@ const handleBatchDelete = () => {
     isDestructive: true
   }
   
-  pendingConfirmAction.value = () => {
-    // Remove from bookmarks array (this would be an API call in real implementation)
-    selectedIds.forEach(id => {
-      const index = bookmarks.value.findIndex(b => b.id === id)
-      if (index !== -1) {
-        bookmarks.value.splice(index, 1)
-      }
-    })
-    clearSelection()
-    console.log('Deleted bookmarks:', selectedIds)
-    // TODO: Show success notification
+  pendingConfirmAction.value = async () => {
+    try {
+      await deleteBookmarks(selectedIds)
+      clearSelection()
+      bulkOperation(selectedBookmarks.length, 'deleted')
+    } catch (error) {
+      console.error('Failed to delete bookmarks:', error)
+      apiError('delete bookmarks', error as Error)
+    }
   }
   
   showConfirmModal.value = true
