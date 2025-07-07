@@ -253,7 +253,7 @@
 
 <script setup lang="ts">
 import { defineOptions } from 'vue'
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 defineOptions({
   name: 'DashboardView'
