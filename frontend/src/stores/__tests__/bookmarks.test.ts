@@ -371,3 +371,109 @@ describe('Bookmark Store - Update Functionality', () => {
     })
   })
 })
+
+describe('Bookmark Store - Global Search Functionality', () => {
+  let store: ReturnType<typeof useBookmarkStore>
+
+  const testBookmarks: Bookmark[] = [
+    {
+      id: '1',
+      url: 'https://react.dev',
+      title: 'React Documentation',
+      description: 'Learn React framework',
+      timestamp: '2023-01-01T00:00:00Z',
+      domain: 'react.dev',
+      age: '1d',
+      action: 'read-later'
+    },
+    {
+      id: '2',
+      url: 'https://vuejs.org',
+      title: 'Vue.js Guide',
+      description: 'Progressive JavaScript framework',
+      timestamp: '2023-01-02T00:00:00Z',
+      domain: 'vuejs.org',
+      age: '2d',
+      action: 'working',
+      topic: 'frontend'
+    },
+    {
+      id: '3',
+      url: 'https://developer.mozilla.org',
+      title: 'JavaScript MDN',
+      description: 'JavaScript reference documentation',
+      timestamp: '2023-01-03T00:00:00Z',
+      domain: 'developer.mozilla.org',
+      age: '3d',
+      action: 'archived'
+    }
+  ]
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    store = useBookmarkStore()
+    
+    // Directly set bookmarks for testing
+    store.bookmarks = testBookmarks
+  })
+
+  it('should return empty results when search query is empty', () => {
+    store.globalSearchQuery = ''
+    expect(store.globalSearchResults).toEqual([])
+  })
+
+  it('should search across all bookmarks regardless of action', () => {
+    store.globalSearchQuery = 'javascript'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(2)
+    expect(results.map(b => b.id)).toEqual(['2', '3'])
+  })
+
+  it('should search by title', () => {
+    store.globalSearchQuery = 'react'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('1')
+  })
+
+  it('should search by URL', () => {
+    store.globalSearchQuery = 'mozilla'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('3')
+  })
+
+  it('should search by description', () => {
+    store.globalSearchQuery = 'framework'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(2)
+    expect(results.map(b => b.id).sort()).toEqual(['1', '2'])
+  })
+
+  it('should be case insensitive', () => {
+    store.globalSearchQuery = 'REACT'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('1')
+  })
+
+  it('should trim whitespace', () => {
+    store.globalSearchQuery = '  javascript  '
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(2)
+  })
+
+  it('should work with partial matches', () => {
+    store.globalSearchQuery = 'doc'
+    const results = store.globalSearchResults
+    
+    expect(results).toHaveLength(2) // React Documentation and JavaScript reference documentation
+    expect(results.map(b => b.id).sort()).toEqual(['1', '3'])
+  })
+})

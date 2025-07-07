@@ -22,8 +22,24 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
   const error = ref<string | null>(null)
   const isConnected = ref(true) // Track API connectivity
   const currentSort = ref('date-desc')
+  const globalSearchQuery = ref('')
 
   // Computed
+  const globalSearchResults = computed(() => {
+    if (!globalSearchQuery.value || globalSearchQuery.value.trim() === '') {
+      return []
+    }
+    
+    const searchTerm = globalSearchQuery.value.trim().toLowerCase()
+    const results = bookmarks.value.filter(bookmark => 
+      bookmark.title.toLowerCase().includes(searchTerm) ||
+      bookmark.url.toLowerCase().includes(searchTerm) ||
+      (bookmark.description && bookmark.description.toLowerCase().includes(searchTerm))
+    )
+    
+    return results
+  })
+  
   const filteredBookmarks = computed(() => {
     let filtered = bookmarks.value
 
@@ -469,9 +485,11 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     error,
     isConnected,
     currentSort,
+    globalSearchQuery,
     
     // Computed
     filteredBookmarks,
+    globalSearchResults,
     dashboardStats,
     shareGroups,
     availableTopics,

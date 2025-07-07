@@ -23,11 +23,10 @@
         <div class="header-right">
           <div class="search-container">
             <AppInput
-              v-model="searchQuery"
+              v-model="searchInputValue"
               icon="🔍"
               placeholder="Search bookmarks..."
               class="compact-search"
-              @input="handleSearch"
             />
           </div>
           <div class="header-actions">
@@ -85,10 +84,10 @@
             
             <div class="section-content">
               <BookmarkList
-                :bookmarks="filteredBookmarks"
+                :bookmarks="displayedBookmarks"
                 :batch-mode="batchMode"
-                :total-count="totalBookmarksForCurrentTab"
-                :show-results-count="hasActiveFilters"
+                :total-count="isGlobalSearchActive ? bookmarks.length : totalBookmarksForCurrentTab"
+                :show-results-count="!!(hasActiveFilters || isGlobalSearchActive)"
                 :loading="loading"
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
@@ -169,10 +168,10 @@
             
             <div class="section-content">
               <BookmarkList
-                :bookmarks="filteredBookmarks"
+                :bookmarks="displayedBookmarks"
                 :batch-mode="batchMode"
-                :total-count="totalBookmarksForCurrentTab"
-                :show-results-count="hasActiveFilters"
+                :total-count="isGlobalSearchActive ? bookmarks.length : totalBookmarksForCurrentTab"
+                :show-results-count="!!(hasActiveFilters || isGlobalSearchActive)"
                 :loading="loading"
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
@@ -294,6 +293,8 @@ const {
   batchMode,
   selectedItems,
   filteredBookmarks,
+  globalSearchResults,
+  globalSearchQuery,
   dashboardStats,
   shareGroups,
   loading,
@@ -319,7 +320,17 @@ const {
 } = bookmarkStore
 
 // Local state
-const searchQuery = ref('')
+const searchInputValue = computed({
+  get: () => globalSearchQuery.value,
+  set: (value) => {
+    globalSearchQuery.value = value
+    // Clear local filters when doing global search
+    if (value && value.trim() !== '') {
+      updateFilters({ search: '' })
+    }
+  }
+})
+
 const showFilters = ref(false)
 const showSort = ref(false)
 const showAddModal = ref(false)
@@ -396,11 +407,16 @@ const totalBookmarksForCurrentTab = computed(() => {
   }
 })
 
-// Methods
-const handleSearch = (query: string) => {
-  updateFilters({ search: query })
-}
+// Computed for search mode
+const isGlobalSearchActive = computed(() => {
+  return globalSearchQuery.value && globalSearchQuery.value.trim() !== ''
+})
 
+const displayedBookmarks = computed(() => {
+  return isGlobalSearchActive.value ? globalSearchResults.value : filteredBookmarks.value
+})
+
+// Methods
 const handleEdit = (bookmarkId: string) => {
   const bookmark = bookmarks.value.find(b => b.id === bookmarkId)
   if (bookmark) {
