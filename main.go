@@ -755,7 +755,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 			"title": req.Title,
 		})
 		log.Printf("Validation failed: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request data", http.StatusBadRequest)
 		return
 	}
 
@@ -1953,6 +1953,21 @@ func updateProject(projectID int, req ProjectUpdateRequest) (*Project, error) {
 	
 	// Add projectID to args for WHERE clause
 	args = append(args, projectID)
+	
+	// Use whitelist approach to prevent SQL injection
+	allowedColumns := map[string]bool{
+		"name = ?":        true,
+		"description = ?": true,
+		"status = ?":      true,
+		"updated_at = ?":  true,
+	}
+	
+	// Validate all setParts against whitelist
+	for _, part := range setParts {
+		if !allowedColumns[part] {
+			return nil, fmt.Errorf("invalid column in update: %s", part)
+		}
+	}
 	
 	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = ?", strings.Join(setParts, ", "))
 	
@@ -3238,14 +3253,31 @@ func validateHTMLFile(filename string) error {
 	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filename)
 	
-	// Ensure the file is in the current directory and has .html extension
+	// Ensure the file has .html extension
 	if !strings.HasSuffix(cleanPath, ".html") {
 		return fmt.Errorf("invalid file extension")
 	}
 	
-	// Prevent directory traversal
-	if strings.Contains(cleanPath, "..") || strings.HasPrefix(cleanPath, "/") {
-		return fmt.Errorf("invalid file path")
+	// Get absolute path of current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %v", err)
+	}
+	
+	// Get absolute path of the requested file
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %v", err)
+	}
+	
+	// Ensure the file is within the current working directory
+	if !strings.HasPrefix(absPath, cwd) {
+		return fmt.Errorf("file path outside allowed directory")
+	}
+	
+	// Additional check: prevent any path containing ".."
+	if strings.Contains(cleanPath, "..") {
+		return fmt.Errorf("invalid file path contains directory traversal")
 	}
 	
 	return nil
