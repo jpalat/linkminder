@@ -590,7 +590,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the dashboard HTML file
 	filename := "dashboard.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -642,7 +642,7 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the projects HTML file
 	filename := "projects.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -693,7 +693,7 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the project detail HTML file
 	filename := "project-detail.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -739,7 +739,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 
 	var req BookmarkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode JSON request: %v", err)
+		log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 			"error": err.Error(),
 		})
@@ -765,13 +765,13 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 			"url":   req.URL,
 			"title": req.Title,
 		})
-		log.Printf("Validation failed: %v", err)
+		log.Printf("Validation failed: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
 		return
 	}
 
 	if err := saveBookmarkToDB(req); err != nil {
-		log.Printf("Failed to save bookmark to database: %v", err)
+		log.Printf("Failed to save bookmark to database: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "database", "Failed to save bookmark", map[string]interface{}{
 			"error": err.Error(),
 			"url": req.URL,
@@ -1602,7 +1602,7 @@ func handleGetProjects(w http.ResponseWriter, r *http.Request) {
 func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	var req ProjectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode project creation request: %v", err)
+		log.Printf("Failed to decode project creation request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Invalid JSON in project creation", map[string]interface{}{
 			"error": err.Error(),
 		})
@@ -1747,7 +1747,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 	
 	var req ProjectUpdateRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		log.Printf("Failed to decode project update request: %v", err)
+		log.Printf("Failed to decode project update request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Invalid JSON in project update", map[string]interface{}{
 			"error":     err.Error(),
 			"projectId": projectID,
@@ -2232,7 +2232,7 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	// URL decode the topic
 	topic, err := url.QueryUnescape(path)
 	if err != nil {
-		log.Printf("Failed to decode topic from URL: %v", err)
+		log.Printf("Failed to decode topic from URL: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Failed to decode topic", map[string]interface{}{
 			"error": err.Error(),
 			"path":  path,
@@ -2768,7 +2768,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		// Handle full bookmark update (PUT)
 		var req BookmarkFullUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("Failed to decode JSON request: %v", err)
+			log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -2787,7 +2787,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err := updateFullBookmarkInDB(bookmarkID, req); err != nil {
-			log.Printf("Failed to update bookmark in database: %v", err)
+			log.Printf("Failed to update bookmark in database: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
 				"error": err.Error(),
 				"id":    bookmarkID,
@@ -2799,7 +2799,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		// Handle partial bookmark update (PATCH)
 		var req BookmarkUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("Failed to decode JSON request: %v", err)
+			log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -2817,7 +2817,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err := updateBookmarkInDB(bookmarkID, req); err != nil {
-			log.Printf("Failed to update bookmark in database: %v", err)
+			log.Printf("Failed to update bookmark in database: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
 				"error": err.Error(),
 				"id":    bookmarkID,
