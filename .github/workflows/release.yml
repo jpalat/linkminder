@@ -73,27 +73,9 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
 
-  build-binaries:
+  build-linux:
     needs: create-release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            cc: gcc
-          - goos: linux
-            goarch: arm64
-            cc: aarch64-linux-gnu-gcc
-          - goos: windows
-            goarch: amd64
-            cc: x86_64-w64-mingw32-gcc
-          - goos: darwin
-            goarch: amd64
-            cc: o64-clang
-          - goos: darwin
-            goarch: arm64
-            cc: o64-clang
     
     steps:
       - name: Checkout
@@ -104,58 +86,33 @@ jobs:
         with:
           go-version: '1.24'
       
-      - name: Install cross-compilation tools
-        run: |
-          sudo apt-get update
-          if [[ "${{ matrix.goos }}" == "linux" && "${{ matrix.goarch }}" == "arm64" ]]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          elif [[ "${{ matrix.goos }}" == "windows" ]]; then
-            sudo apt-get install -y gcc-mingw-w64-x86-64
-          fi
-      
       - name: Build binary
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+          GOOS: linux
+          GOARCH: amd64
           CGO_ENABLED: 1
-          CC: ${{ matrix.cc }}
         run: |
-          BINARY_NAME="bookminderapi"
-          if [[ "$GOOS" == "windows" ]]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          
-          echo "Building for $GOOS/$GOARCH..."
-          go build -ldflags="-s -w -X main.Version=${{ needs.create-release.outputs.tag_name }}" -o "${BINARY_NAME}" main.go
+          echo "Building for linux/amd64..."
+          go build -ldflags="-s -w -X main.Version=${{ needs.create-release.outputs.tag_name }}" -o bookminderapi main.go
           
           # Create release package
-          PACKAGE_NAME="bookminderapi-${GOOS}-${GOARCH}"
+          PACKAGE_NAME="bookminderapi-linux-amd64"
           mkdir "${PACKAGE_NAME}"
-          cp "${BINARY_NAME}" "${PACKAGE_NAME}/"
+          cp bookminderapi "${PACKAGE_NAME}/"
           cp -r migrations "${PACKAGE_NAME}/"
           cp README.md "${PACKAGE_NAME}/"
           
           # Create installation script
-          if [[ "$GOOS" == "windows" ]]; then
-            echo "@echo off" > "${PACKAGE_NAME}/install.bat"
-            echo "echo Installing BookMinder API..." >> "${PACKAGE_NAME}/install.bat"
-            echo "copy bookminderapi.exe C:\\Windows\\System32\\" >> "${PACKAGE_NAME}/install.bat"
-            echo "echo Installation complete. Run 'bookminderapi' from anywhere." >> "${PACKAGE_NAME}/install.bat"
-            zip -r "${PACKAGE_NAME}.zip" "${PACKAGE_NAME}"
-            ASSET_PATH="${PACKAGE_NAME}.zip"
-          else
-            echo "#!/bin/bash" > "${PACKAGE_NAME}/install.sh"
-            echo "echo \"Installing BookMinder API...\"" >> "${PACKAGE_NAME}/install.sh"
-            echo "sudo cp bookminderapi /usr/local/bin/" >> "${PACKAGE_NAME}/install.sh"
-            echo "sudo chmod +x /usr/local/bin/bookminderapi" >> "${PACKAGE_NAME}/install.sh"
-            echo "echo \"Installation complete. Run 'bookminderapi' from anywhere.\"" >> "${PACKAGE_NAME}/install.sh"
-            chmod +x "${PACKAGE_NAME}/install.sh"
-            tar -czf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_NAME}"
-            ASSET_PATH="${PACKAGE_NAME}.tar.gz"
-          fi
+          echo "#!/bin/bash" > "${PACKAGE_NAME}/install.sh"
+          echo "echo \"Installing BookMinder API...\"" >> "${PACKAGE_NAME}/install.sh"
+          echo "sudo cp bookminderapi /usr/local/bin/" >> "${PACKAGE_NAME}/install.sh"
+          echo "sudo chmod +x /usr/local/bin/bookminderapi" >> "${PACKAGE_NAME}/install.sh"
+          echo "echo \"Installation complete. Run 'bookminderapi' from anywhere.\"" >> "${PACKAGE_NAME}/install.sh"
+          chmod +x "${PACKAGE_NAME}/install.sh"
+          tar -czf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_NAME}"
           
-          echo "ASSET_PATH=${ASSET_PATH}" >> $GITHUB_ENV
-          echo "ASSET_NAME=${ASSET_PATH}" >> $GITHUB_ENV
+          echo "ASSET_PATH=${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
+          echo "ASSET_NAME=${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
       
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
