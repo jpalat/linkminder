@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -19,6 +20,16 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+// sanitizeForLog removes newlines and carriage returns from user input to prevent log injection
+func sanitizeForLog(input string) string {
+	// Remove newlines and carriage returns to prevent log injection
+	sanitized := strings.ReplaceAll(input, "\n", "")
+	sanitized = strings.ReplaceAll(sanitized, "\r", "")
+	// Also escape HTML to prevent HTML injection in log viewers
+	sanitized = html.EscapeString(sanitized)
+	return sanitized
+}
 
 type Project struct {
 	ID          int    `json:"id"`
@@ -558,7 +569,7 @@ func withCORS(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to / from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to / from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Dashboard request received", map[string]interface{}{
 		"method": r.Method,
@@ -567,7 +578,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -579,7 +590,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the dashboard HTML file
 	filename := "dashboard.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -610,7 +621,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /projects from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /projects from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Projects page request received", map[string]interface{}{
 		"method": r.Method,
@@ -619,7 +630,7 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -631,7 +642,7 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the projects HTML file
 	filename := "projects.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -661,7 +672,7 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /project-detail from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /project-detail from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Project detail page request received", map[string]interface{}{
 		"method": r.Method,
@@ -670,7 +681,7 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -682,7 +693,7 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 	// Validate and read the project detail HTML file
 	filename := "project-detail.html"
 	if err := validateHTMLFile(filename); err != nil {
-		log.Printf("Invalid HTML file: %v", err)
+		log.Printf("Invalid HTML file: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
@@ -708,7 +719,7 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBookmark(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /bookmark from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /bookmark from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Bookmark request received", map[string]interface{}{
 		"method": r.Method,
@@ -717,7 +728,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodPost {
-		log.Printf("Method not allowed: %s (expected POST)", r.Method)
+		log.Printf("Method not allowed: %s (expected POST)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "POST",
@@ -728,7 +739,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 
 	var req BookmarkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode JSON request: %v", err)
+		log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 			"error": err.Error(),
 		})
@@ -737,7 +748,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Parsed bookmark request: URL=%s, Title=%s, Action=%s, Topic=%s", 
-		req.URL, req.Title, req.Action, req.Topic)
+		sanitizeForLog(req.URL), sanitizeForLog(req.Title), sanitizeForLog(req.Action), sanitizeForLog(req.Topic))
 
 	logStructured("INFO", "api", "Bookmark request parsed", map[string]interface{}{
 		"url": req.URL,
@@ -754,13 +765,13 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 			"url":   req.URL,
 			"title": req.Title,
 		})
-		log.Printf("Validation failed: %v", err)
+		log.Printf("Validation failed: %v", sanitizeForLog(err.Error()))
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
 		return
 	}
 
 	if err := saveBookmarkToDB(req); err != nil {
-		log.Printf("Failed to save bookmark to database: %v", err)
+		log.Printf("Failed to save bookmark to database: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "database", "Failed to save bookmark", map[string]interface{}{
 			"error": err.Error(),
 			"url": req.URL,
@@ -769,7 +780,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully saved bookmark: %s", req.URL)
+	log.Printf("Successfully saved bookmark: %s", sanitizeForLog(req.URL))
 	logStructured("INFO", "database", "Bookmark saved successfully", map[string]interface{}{
 		"url": req.URL,
 		"title": req.Title,
@@ -809,7 +820,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTopics(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /topics from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /topics from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Topics request received", map[string]interface{}{
 		"method": r.Method,
@@ -817,7 +828,7 @@ func handleTopics(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -856,7 +867,7 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 		return fmt.Errorf("failed to validate database connection: %v", err)
 	}
 
-	log.Printf("Saving bookmark to database: %s", req.URL)
+	log.Printf("Saving bookmark to database: %s", sanitizeForLog(req.URL))
 	
 	logStructured("INFO", "database", "Saving bookmark", map[string]interface{}{
 		"url": req.URL,
@@ -955,7 +966,7 @@ func getTopicsFromDB() ([]string, error) {
 }
 
 func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /api/stats/summary from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /api/stats/summary from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Stats summary request received", map[string]interface{}{
 		"method": r.Method,
@@ -963,7 +974,7 @@ func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -1155,7 +1166,7 @@ func getProjectStats() ([]ProjectStat, error) {
 }
 
 func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /api/bookmarks/triage from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /api/bookmarks/triage from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Triage queue request received", map[string]interface{}{
 		"method":      r.Method,
@@ -1163,7 +1174,7 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
 			"expected": "GET",
@@ -1218,7 +1229,7 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBookmarks(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /api/bookmarks from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /api/bookmarks from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Bookmarks request received", map[string]interface{}{
 		"method":      r.Method,
@@ -1226,7 +1237,7 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
 			"expected": "GET",
@@ -1263,7 +1274,7 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	// Get bookmarks by action
 	bookmarksData, err := getBookmarksByAction(action, limit, offset)
 	if err != nil {
-		log.Printf("Failed to get bookmarks for action %s: %v", action, err)
+		log.Printf("Failed to get bookmarks for action %s: %v", sanitizeForLog(action), err)
 		logStructured("ERROR", "database", "Failed to get bookmarks", map[string]interface{}{
 			"error":  err.Error(),
 			"action": action,
@@ -1272,7 +1283,7 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully retrieved %d bookmarks for action %s", len(bookmarksData.Bookmarks), action)
+	log.Printf("Successfully retrieved %d bookmarks for action %s", len(bookmarksData.Bookmarks), sanitizeForLog(action))
 	logStructured("INFO", "database", "Bookmarks retrieved", map[string]interface{}{
 		"count":  len(bookmarksData.Bookmarks),
 		"total":  bookmarksData.Total,
@@ -1533,7 +1544,7 @@ func getSuggestedAction(domain, title, description string) string {
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to /api/projects from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to /api/projects from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Projects request received", map[string]interface{}{
 		"method":      r.Method,
@@ -1553,7 +1564,7 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handleCreateProject(w, r)
 	default:
-		log.Printf("Method not allowed: %s", r.Method)
+		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"allowed": []string{"GET", "POST"},
@@ -1591,7 +1602,7 @@ func handleGetProjects(w http.ResponseWriter, r *http.Request) {
 func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	var req ProjectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode project creation request: %v", err)
+		log.Printf("Failed to decode project creation request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Invalid JSON in project creation", map[string]interface{}{
 			"error": err.Error(),
 		})
@@ -1616,7 +1627,7 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	project, err := createProject(req)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			log.Printf("Project name already exists: %s", req.Name)
+			log.Printf("Project name already exists: %s", sanitizeForLog(req.Name))
 			logStructured("WARN", "database", "Duplicate project name", map[string]interface{}{
 				"name": req.Name,
 			})
@@ -1633,7 +1644,7 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	log.Printf("Successfully created project: %s (ID: %d)", project.Name, project.ID)
+	log.Printf("Successfully created project: %s (ID: %d)", sanitizeForLog(project.Name), project.ID)
 	logStructured("INFO", "database", "Project created", map[string]interface{}{
 		"id":   project.ID,
 		"name": project.Name,
@@ -1649,7 +1660,7 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to project settings from %s", r.Method, r.RemoteAddr)
+	log.Printf("Received %s request to project settings from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
 	
 	// Extract project ID from URL path
 	path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
@@ -1671,7 +1682,7 @@ func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
 	
 	projectID, err := strconv.Atoi(path)
 	if err != nil {
-		log.Printf("Invalid project ID: %s", path)
+		log.Printf("Invalid project ID: %s", sanitizeForLog(path))
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
@@ -1684,7 +1695,7 @@ func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		handleDeleteProject(w, r, projectID)
 	default:
-		log.Printf("Method not allowed: %s", r.Method)
+		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed for project settings", map[string]interface{}{
 			"method": r.Method,
 			"allowed": []string{"GET", "PUT", "DELETE"},
@@ -1736,7 +1747,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 	
 	var req ProjectUpdateRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		log.Printf("Failed to decode project update request: %v", err)
+		log.Printf("Failed to decode project update request: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Invalid JSON in project update", map[string]interface{}{
 			"error":     err.Error(),
 			"projectId": projectID,
@@ -1775,7 +1786,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		}
 		
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			log.Printf("Project name already exists: %s", req.Name)
+			log.Printf("Project name already exists: %s", sanitizeForLog(req.Name))
 			logStructured("WARN", "database", "Duplicate project name in update", map[string]interface{}{
 				"name":      req.Name,
 				"projectId": projectID,
@@ -2189,7 +2200,7 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 }
 
 func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Project detail request received", map[string]interface{}{
 		"method":      r.Method,
@@ -2198,7 +2209,7 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
 			"expected": "GET",
@@ -2221,7 +2232,7 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	// URL decode the topic
 	topic, err := url.QueryUnescape(path)
 	if err != nil {
-		log.Printf("Failed to decode topic from URL: %v", err)
+		log.Printf("Failed to decode topic from URL: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "api", "Failed to decode topic", map[string]interface{}{
 			"error": err.Error(),
 			"path":  path,
@@ -2233,14 +2244,14 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	projectDetail, err := getProjectDetail(topic)
 	if err != nil {
 		if strings.Contains(err.Error(), "project not found") {
-			log.Printf("Project not found: %s", topic)
+			log.Printf("Project not found: %s", sanitizeForLog(topic))
 			logStructured("WARN", "api", "Project not found", map[string]interface{}{
 				"topic": topic,
 			})
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("Failed to get project detail for topic '%s': %v", topic, err)
+		log.Printf("Failed to get project detail for topic '%s': %v", sanitizeForLog(topic), err)
 		logStructured("ERROR", "database", "Failed to get project detail", map[string]interface{}{
 			"error": err.Error(),
 			"topic": topic,
@@ -2249,7 +2260,7 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully retrieved project detail for '%s' with %d bookmarks", topic, len(projectDetail.Bookmarks))
+	log.Printf("Successfully retrieved project detail for '%s' with %d bookmarks", sanitizeForLog(topic), len(projectDetail.Bookmarks))
 	logStructured("INFO", "database", "Project detail retrieved", map[string]interface{}{
 		"topic":          topic,
 		"bookmarkCount":  len(projectDetail.Bookmarks),
@@ -2265,7 +2276,7 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjectByID(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Project by ID request received", map[string]interface{}{
 		"method": r.Method,
@@ -2274,7 +2285,7 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodGet {
-		log.Printf("Method not allowed: %s (expected GET)", r.Method)
+		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method": r.Method,
 			"expected": "GET",
@@ -2296,7 +2307,7 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 
 	projectID, err := strconv.Atoi(path)
 	if err != nil {
-		log.Printf("Invalid project ID: %s", path)
+		log.Printf("Invalid project ID: %s", sanitizeForLog(path))
 		logStructured("WARN", "api", "Invalid project ID", map[string]interface{}{
 			"provided_id": path,
 			"error": err.Error(),
@@ -2674,7 +2685,7 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 }
 
 func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request to %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
 	
 	logStructured("INFO", "api", "Bookmark update request received", map[string]interface{}{
 		"method":      r.Method,
@@ -2683,7 +2694,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	if r.Method != http.MethodPatch && r.Method != http.MethodPut && r.Method != http.MethodDelete {
-		log.Printf("Method not allowed: %s (expected PATCH, PUT, or DELETE)", r.Method)
+		log.Printf("Method not allowed: %s (expected PATCH, PUT, or DELETE)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
 			"method":   r.Method,
 			"expected": "PATCH, PUT, or DELETE",
@@ -2705,7 +2716,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 
 	bookmarkID, err := strconv.Atoi(path)
 	if err != nil {
-		log.Printf("Invalid bookmark ID: %s", path)
+		log.Printf("Invalid bookmark ID: %s", sanitizeForLog(path))
 		logStructured("ERROR", "api", "Invalid bookmark ID", map[string]interface{}{
 			"error": err.Error(),
 			"id":    path,
@@ -2757,7 +2768,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		// Handle full bookmark update (PUT)
 		var req BookmarkFullUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("Failed to decode JSON request: %v", err)
+			log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -2766,7 +2777,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		log.Printf("Parsed full bookmark update request: ID=%d, Title=%s, URL=%s, Action=%s", 
-			bookmarkID, req.Title, req.URL, req.Action)
+			bookmarkID, sanitizeForLog(req.Title), sanitizeForLog(req.URL), sanitizeForLog(req.Action))
 
 		logStructured("INFO", "api", "Full bookmark update request parsed", map[string]interface{}{
 			"id":     bookmarkID,
@@ -2776,7 +2787,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err := updateFullBookmarkInDB(bookmarkID, req); err != nil {
-			log.Printf("Failed to update bookmark in database: %v", err)
+			log.Printf("Failed to update bookmark in database: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
 				"error": err.Error(),
 				"id":    bookmarkID,
@@ -2788,7 +2799,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		// Handle partial bookmark update (PATCH)
 		var req BookmarkUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("Failed to decode JSON request: %v", err)
+			log.Printf("Failed to decode JSON request: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "api", "JSON decode failed", map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -2797,7 +2808,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s", 
-			bookmarkID, req.Action, req.Topic)
+			bookmarkID, sanitizeForLog(req.Action), sanitizeForLog(req.Topic))
 
 		logStructured("INFO", "api", "Bookmark update request parsed", map[string]interface{}{
 			"id":     bookmarkID,
@@ -2806,7 +2817,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err := updateBookmarkInDB(bookmarkID, req); err != nil {
-			log.Printf("Failed to update bookmark in database: %v", err)
+			log.Printf("Failed to update bookmark in database: %v", sanitizeForLog(err.Error()))
 			logStructured("ERROR", "database", "Failed to update bookmark", map[string]interface{}{
 				"error": err.Error(),
 				"id":    bookmarkID,
@@ -3035,7 +3046,7 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 				VALUES (?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			`, req.Topic, fmt.Sprintf("Auto-created for topic: %s", req.Topic))
 			if err != nil {
-				log.Printf("Failed to create project for topic %s: %v", req.Topic, err)
+				log.Printf("Failed to create project for topic %s: %v", sanitizeForLog(req.Topic), err)
 				return fmt.Errorf("failed to create project for topic %s", req.Topic)
 			}
 			
