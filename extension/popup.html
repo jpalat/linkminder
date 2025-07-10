@@ -95,6 +95,12 @@
             border: 1px solid #f5c6cb;
         }
         
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .conditional-field {
             display: none;
         }
@@ -254,6 +260,8 @@
 <body>
     <h1>BookMinder</h1>
     
+    <div id="status" class="status" style="display: none;"></div>
+    
     <div class="field">
         <label for="url">URL:</label>
         <input type="text" id="url" readonly>
@@ -314,9 +322,6 @@
         <button id="saveBtn">Save Bookmark</button>
         <button id="saveCloseBtn">Save & Close Tab</button>
     </div>
-    
-    
-    <div id="status" class="status" style="display: none;"></div>
     
     <script src="popup.js"></script>
 </body>

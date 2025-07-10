@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -5047,6 +5048,263 @@ func TestSoftDelete_ProjectDetailExcludesDeleted(t *testing.T) {
 		bookmarks_response := projectDetail["bookmarks"].([]interface{})
 		if len(bookmarks_response) != 2 {
 			t.Errorf("Expected 2 bookmarks in response (excluding deleted), got %d", len(bookmarks_response))
+		}
+	})
+}
+
+func TestGetBookmarkByURL_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Save a bookmark first
+		req := BookmarkRequest{
+			URL:         "https://example.com/test",
+			Title:       "Test Bookmark",
+			Description: "Test Description",
+			Action:      "working",
+			Topic:       "Test Topic",
+			Tags:        []string{"tag1", "tag2"},
+			CustomProperties: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		}
+		
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Fatalf("Failed to save bookmark: %v", err)
+		}
+		
+		// Test getBookmarkByURL function
+		bookmark, err := getBookmarkByURL("https://example.com/test")
+		if err != nil {
+			t.Fatalf("Failed to get bookmark by URL: %v", err)
+		}
+		
+		if bookmark == nil {
+			t.Fatal("Expected bookmark to be found, got nil")
+		}
+		
+		if bookmark.URL != "https://example.com/test" {
+			t.Errorf("Expected URL 'https://example.com/test', got '%s'", bookmark.URL)
+		}
+		
+		if bookmark.Title != "Test Bookmark" {
+			t.Errorf("Expected title 'Test Bookmark', got '%s'", bookmark.Title)
+		}
+		
+		if bookmark.Description != "Test Description" {
+			t.Errorf("Expected description 'Test Description', got '%s'", bookmark.Description)
+		}
+		
+		if bookmark.Action != "working" {
+			t.Errorf("Expected action 'working', got '%s'", bookmark.Action)
+		}
+		
+		if bookmark.Topic != "Test Topic" {
+			t.Errorf("Expected topic 'Test Topic', got '%s'", bookmark.Topic)
+		}
+		
+		if len(bookmark.Tags) != 2 {
+			t.Errorf("Expected 2 tags, got %d", len(bookmark.Tags))
+		}
+		
+		if len(bookmark.CustomProperties) != 2 {
+			t.Errorf("Expected 2 custom properties, got %d", len(bookmark.CustomProperties))
+		}
+		
+		if bookmark.CustomProperties["key1"] != "value1" {
+			t.Errorf("Expected custom property key1='value1', got '%s'", bookmark.CustomProperties["key1"])
+		}
+	})
+}
+
+func TestGetBookmarkByURL_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with non-existent URL
+		bookmark, err := getBookmarkByURL("https://nonexistent.com/test")
+		if err != nil {
+			t.Fatalf("Expected no error for non-existent bookmark, got: %v", err)
+		}
+		
+		if bookmark != nil {
+			t.Error("Expected nil bookmark for non-existent URL")
+		}
+	})
+}
+
+func TestHandleBookmarkByURL_Success(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Save a bookmark first
+		req := BookmarkRequest{
+			URL:         "https://example.com/api-test",
+			Title:       "API Test Bookmark",
+			Description: "API Test Description",
+			Action:      "share",
+			ShareTo:     "team@example.com",
+			Tags:        []string{"api", "test"},
+		}
+		
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Fatalf("Failed to save bookmark: %v", err)
+		}
+		
+		// Test the HTTP handler
+		encodedURL := url.QueryEscape("https://example.com/api-test")
+		request := httptest.NewRequest("GET", "/api/bookmark/by-url?url="+encodedURL, nil)
+		w := httptest.NewRecorder()
+		
+		handleBookmarkByURL(w, request)
+		
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+		
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if !response["found"].(bool) {
+			t.Error("Expected found=true")
+		}
+		
+		bookmark := response["bookmark"].(map[string]interface{})
+		if bookmark["title"] != "API Test Bookmark" {
+			t.Errorf("Expected title 'API Test Bookmark', got '%s'", bookmark["title"])
+		}
+		
+		if bookmark["action"] != "share" {
+			t.Errorf("Expected action 'share', got '%s'", bookmark["action"])
+		}
+		
+		if bookmark["shareTo"] != "team@example.com" {
+			t.Errorf("Expected shareTo 'team@example.com', got '%s'", bookmark["shareTo"])
+		}
+	})
+}
+
+func TestHandleBookmarkByURL_NotFound(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Test with non-existent URL
+		encodedURL := url.QueryEscape("https://nonexistent.com/test")
+		request := httptest.NewRequest("GET", "/api/bookmark/by-url?url="+encodedURL, nil)
+		w := httptest.NewRecorder()
+		
+		handleBookmarkByURL(w, request)
+		
+		if w.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404, got %d", w.Code)
+		}
+		
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
+		
+		if response["found"].(bool) {
+			t.Error("Expected found=false for non-existent URL")
+		}
+	})
+}
+
+func TestHandleBookmarkByURL_InvalidMethod(t *testing.T) {
+	request := httptest.NewRequest("POST", "/api/bookmark/by-url", nil)
+	w := httptest.NewRecorder()
+	
+	handleBookmarkByURL(w, request)
+	
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405, got %d", w.Code)
+	}
+}
+
+func TestHandleBookmarkByURL_MissingURL(t *testing.T) {
+	request := httptest.NewRequest("GET", "/api/bookmark/by-url", nil)
+	w := httptest.NewRecorder()
+	
+	handleBookmarkByURL(w, request)
+	
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestSaveBookmarkToDB_UpdateExisting(t *testing.T) {
+	withTestDB(t, func(t *testing.T, tdb *TestDB) {
+		// Save initial bookmark
+		req := BookmarkRequest{
+			URL:         "https://example.com/update-test",
+			Title:       "Original Title",
+			Description: "Original Description",
+			Action:      "read-later",
+		}
+		
+		err := saveBookmarkToDB(req)
+		if err != nil {
+			t.Fatalf("Failed to save initial bookmark: %v", err)
+		}
+		
+		// Update the bookmark
+		req.Title = "Updated Title"
+		req.Description = "Updated Description"
+		req.Action = "working"
+		req.Topic = "Updated Topic"
+		req.Tags = []string{"updated", "tag"}
+		
+		err = saveBookmarkToDB(req)
+		if err != nil {
+			t.Fatalf("Failed to update bookmark: %v", err)
+		}
+		
+		// Verify the bookmark was updated, not duplicated
+		bookmark, err := getBookmarkByURL("https://example.com/update-test")
+		if err != nil {
+			t.Fatalf("Failed to get updated bookmark: %v", err)
+		}
+		
+		if bookmark == nil {
+			t.Fatal("Expected bookmark to be found")
+		}
+		
+		if bookmark.Title != "Updated Title" {
+			t.Errorf("Expected title 'Updated Title', got '%s'", bookmark.Title)
+		}
+		
+		if bookmark.Description != "Updated Description" {
+			t.Errorf("Expected description 'Updated Description', got '%s'", bookmark.Description)
+		}
+		
+		if bookmark.Action != "working" {
+			t.Errorf("Expected action 'working', got '%s'", bookmark.Action)
+		}
+		
+		if bookmark.Topic != "Updated Topic" {
+			t.Errorf("Expected topic 'Updated Topic', got '%s'", bookmark.Topic)
+		}
+		
+		if len(bookmark.Tags) != 2 {
+			t.Errorf("Expected 2 tags, got %d", len(bookmark.Tags))
+		}
+		
+		// Verify no duplicate bookmarks were created
+		rows, err := db.Query("SELECT COUNT(*) FROM bookmarks WHERE url = ?", req.URL)
+		if err != nil {
+			t.Fatalf("Failed to count bookmarks: %v", err)
+		}
+		defer rows.Close()
+		
+		var count int
+		if rows.Next() {
+			err = rows.Scan(&count)
+			if err != nil {
+				t.Fatalf("Failed to scan count: %v", err)
+			}
+		}
+		
+		if count != 1 {
+			t.Errorf("Expected 1 bookmark for URL, got %d", count)
 		}
 	})
 }
