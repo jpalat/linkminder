@@ -354,6 +354,7 @@ func main() {
 	http.HandleFunc("/api/projects/", withCORS(handleProjectDetail))
 	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
 	http.HandleFunc("/api/bookmarks/", withCORS(handleBookmarkUpdate))
+	http.HandleFunc("/api/bookmark/by-url", withCORS(handleBookmarkByURL))
 	
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
@@ -374,6 +375,7 @@ func main() {
 	log.Printf("  PATCH /api/bookmarks/{id} - Update a bookmark (partial)")
 	log.Printf("  PUT /api/bookmarks/{id} - Update a bookmark (full)")
 	log.Printf("  DELETE /api/bookmarks/{id} - Soft delete a bookmark")
+	log.Printf("  GET /api/bookmark/by-url?url={url} - Get bookmark by URL")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -880,6 +882,59 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 	tagsJSON := tagsToJSON(req.Tags)
 	customPropsJSON := customPropsToJSON(req.CustomProperties)
 
+	// Check if bookmark already exists
+	var existingID int
+	checkSQL := `SELECT id FROM bookmarks WHERE url = ? AND (deleted = FALSE OR deleted IS NULL) LIMIT 1`
+	err := db.QueryRow(checkSQL, req.URL).Scan(&existingID)
+	
+	if err == nil {
+		// Bookmark exists, update it
+		log.Printf("Updating existing bookmark with ID: %d", existingID)
+		logStructured("INFO", "database", "Updating existing bookmark", map[string]interface{}{
+			"id": existingID,
+			"url": req.URL,
+		})
+		
+		updateSQL := `
+		UPDATE bookmarks 
+		SET title = ?, description = ?, content = ?, action = ?, shareTo = ?, topic = ?, tags = ?, custom_properties = ?, timestamp = CURRENT_TIMESTAMP
+		WHERE id = ?`
+		
+		_, err = db.Exec(updateSQL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic, tagsJSON, customPropsJSON, existingID)
+		if err != nil {
+			log.Printf("Failed to update bookmark: %v", err)
+			logStructured("ERROR", "database", "Update failed", map[string]interface{}{
+				"error": err.Error(),
+				"id": existingID,
+				"url": req.URL,
+			})
+			return err
+		}
+		
+		log.Printf("Successfully updated bookmark with ID: %d", existingID)
+		logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
+			"id": existingID,
+			"url": req.URL,
+			"title": req.Title,
+		})
+		
+		return nil
+	} else if err != sql.ErrNoRows {
+		// Database error
+		log.Printf("Error checking for existing bookmark: %v", err)
+		logStructured("ERROR", "database", "Error checking existing bookmark", map[string]interface{}{
+			"error": err.Error(),
+			"url": req.URL,
+		})
+		return err
+	}
+	
+	// No existing bookmark found, create new one
+	log.Printf("Creating new bookmark for URL: %s", sanitizeForLog(req.URL))
+	logStructured("INFO", "database", "Creating new bookmark", map[string]interface{}{
+		"url": req.URL,
+	})
+	
 	insertSQL := `
 	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic, tags, custom_properties)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -903,8 +958,8 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 		return err
 	}
 	
-	log.Printf("Successfully saved bookmark with ID: %d", id)
-	logStructured("INFO", "database", "Bookmark saved", map[string]interface{}{
+	log.Printf("Successfully created bookmark with ID: %d", id)
+	logStructured("INFO", "database", "Bookmark created", map[string]interface{}{
 		"id": id,
 		"url": req.URL,
 		"title": req.Title,
@@ -1541,6 +1596,158 @@ func getSuggestedAction(domain, title, description string) string {
 	
 	// Default to read-later
 	return "read-later"
+}
+
+func getBookmarkByURL(url string) (*TriageBookmark, error) {
+	logStructured("INFO", "database", "Getting bookmark by URL", map[string]interface{}{
+		"url": url,
+	})
+
+	querySQL := `
+		SELECT id, url, title, description, timestamp, action, topic, shareTo, tags, custom_properties
+		FROM bookmarks 
+		WHERE url = ? AND (deleted = FALSE OR deleted IS NULL)
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`
+	
+	row := db.QueryRow(querySQL, url)
+	
+	var bookmark TriageBookmark
+	var timestamp string
+	var description, action, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
+	
+	err := row.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &action, &topic, &shareTo, &tagsJSON, &customPropsJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No bookmark found for this URL
+		}
+		return nil, fmt.Errorf("failed to scan bookmark: %v", err)
+	}
+	
+	// Set optional fields
+	if description.Valid {
+		bookmark.Description = description.String
+	}
+	if action.Valid {
+		bookmark.Action = action.String
+	}
+	if topic.Valid {
+		bookmark.Topic = topic.String
+	}
+	if shareTo.Valid {
+		bookmark.ShareTo = shareTo.String
+	}
+	
+	// Parse tags from JSON
+	if tagsJSON.Valid && tagsJSON.String != "" {
+		var tags []string
+		if err := json.Unmarshal([]byte(tagsJSON.String), &tags); err == nil {
+			bookmark.Tags = tags
+		}
+	}
+	
+	// Parse custom properties from JSON
+	if customPropsJSON.Valid && customPropsJSON.String != "" {
+		var customProps map[string]string
+		if err := json.Unmarshal([]byte(customPropsJSON.String), &customProps); err == nil {
+			bookmark.CustomProperties = customProps
+		}
+	}
+	
+	// Set timestamp and calculate age
+	bookmark.Timestamp = timestamp
+	bookmark.Age = calculateAge(timestamp)
+	
+	// Extract domain from URL
+	if parsedURL, err := url.Parse(bookmark.URL); err == nil {
+		bookmark.Domain = parsedURL.Host
+	}
+	
+	return &bookmark, nil
+}
+
+func handleBookmarkByURL(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received %s request to /api/bookmark/by-url from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
+	
+	logStructured("INFO", "api", "Bookmark by URL request received", map[string]interface{}{
+		"method":      r.Method,
+		"remote_addr": r.RemoteAddr,
+	})
+	
+	if r.Method != "GET" {
+		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
+		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
+			"method": r.Method,
+			"expected": "GET",
+		})
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// Get URL parameter
+	urlParam := r.URL.Query().Get("url")
+	if urlParam == "" {
+		log.Printf("Missing URL parameter")
+		logStructured("WARN", "api", "Missing URL parameter", nil)
+		http.Error(w, "URL parameter is required", http.StatusBadRequest)
+		return
+	}
+	
+	// Validate URL format
+	if _, err := url.Parse(urlParam); err != nil {
+		log.Printf("Invalid URL format: %v", err)
+		logStructured("WARN", "api", "Invalid URL format", map[string]interface{}{
+			"url": urlParam,
+			"error": err.Error(),
+		})
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+		return
+	}
+	
+	// Get bookmark from database
+	bookmark, err := getBookmarkByURL(urlParam)
+	if err != nil {
+		log.Printf("Failed to get bookmark by URL: %v", err)
+		logStructured("ERROR", "api", "Failed to get bookmark by URL", map[string]interface{}{
+			"url": urlParam,
+			"error": err.Error(),
+		})
+		http.Error(w, "Failed to retrieve bookmark", http.StatusInternalServerError)
+		return
+	}
+	
+	// Set response headers
+	w.Header().Set("Content-Type", "application/json")
+	
+	// Return empty response if no bookmark found
+	if bookmark == nil {
+		w.WriteHeader(http.StatusNotFound)
+		if _, err := w.Write([]byte(`{"found": false}`)); err != nil {
+			log.Printf("Failed to write not found response: %v", err)
+		}
+		return
+	}
+	
+	// Return the bookmark
+	response := map[string]interface{}{
+		"found": true,
+		"bookmark": bookmark,
+	}
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode bookmark response: %v", err)
+		logStructured("ERROR", "api", "Failed to encode response", map[string]interface{}{
+			"error": err.Error(),
+		})
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	
+	logStructured("INFO", "api", "Bookmark by URL served successfully", map[string]interface{}{
+		"url": urlParam,
+		"found": true,
+	})
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
