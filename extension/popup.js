@@ -186,6 +186,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   
+  // Check for existing bookmark
+  async function checkExistingBookmark(url) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getBookmarkByUrl',
+        url: url
+      });
+      
+      if (response.success && response.found) {
+        return response.bookmark;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error checking existing bookmark:', error);
+      return null;
+    }
+  }
+  
+  // Function to populate form with existing bookmark data
+  function populateFormWithBookmark(bookmark) {
+    // Set form fields
+    titleInput.value = bookmark.title;
+    descriptionInput.value = bookmark.description || '';
+    actionSelect.value = bookmark.action || 'read-later';
+    shareToInput.value = bookmark.shareTo || '';
+    topicInput.value = bookmark.topic || '';
+    
+    // Set tags
+    tags = bookmark.tags || [];
+    renderTags();
+    
+    // Set custom properties
+    customProperties = bookmark.customProperties || {};
+    renderCustomProperties();
+    
+    // Update conditional fields
+    updateConditionalFields();
+    
+    // Show status that bookmark exists
+    showStatus('Found existing bookmark - fields populated', false);
+    
+    // Add visual indicator
+    const existingIndicator = document.createElement('div');
+    existingIndicator.className = 'status info';
+    existingIndicator.innerHTML = `
+      <strong>Previously saved:</strong> ${bookmark.age} ago
+      <br>
+      <small>Saving will update the existing bookmark</small>
+    `;
+    existingIndicator.style.display = 'block';
+    statusDiv.parentNode.insertBefore(existingIndicator, statusDiv);
+  }
+  
   // Initialize
   await loadTopics();
   
@@ -255,11 +308,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pageData = await getPageDataSafely(tab);
     
     urlInput.value = pageData.url;
-    titleInput.value = pageData.title;
-    descriptionInput.value = pageData.description;
     
-    if (!pageData.content) {
-      showStatus('Page content not available - saved with basic info', false);
+    // Check for existing bookmark first
+    const existingBookmark = await checkExistingBookmark(pageData.url);
+    
+    if (existingBookmark) {
+      // Use existing bookmark data
+      populateFormWithBookmark(existingBookmark);
+    } else {
+      // Use fresh page data
+      titleInput.value = pageData.title;
+      descriptionInput.value = pageData.description;
+      
+      if (!pageData.content) {
+        showStatus('Page content not available - saved with basic info', false);
+      }
     }
   } catch (error) {
     console.error('Error getting page data:', error);
