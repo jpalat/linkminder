@@ -1598,9 +1598,9 @@ func getSuggestedAction(domain, title, description string) string {
 	return "read-later"
 }
 
-func getBookmarkByURL(url string) (*TriageBookmark, error) {
+func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 	logStructured("INFO", "database", "Getting bookmark by URL", map[string]interface{}{
-		"url": url,
+		"url": urlStr,
 	})
 
 	querySQL := `
@@ -1611,7 +1611,7 @@ func getBookmarkByURL(url string) (*TriageBookmark, error) {
 		LIMIT 1
 	`
 	
-	row := db.QueryRow(querySQL, url)
+	row := db.QueryRow(querySQL, urlStr)
 	
 	var bookmark TriageBookmark
 	var timestamp string
