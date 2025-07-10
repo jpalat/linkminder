@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     settingsDiv.className = 'status error';
     settingsDiv.innerHTML = 'API URL not configured. <a href="#" id="openSettings">Open Settings</a>';
     settingsDiv.style.display = 'block';
-    statusDiv.parentNode.insertBefore(settingsDiv, statusDiv);
+    statusDiv.parentNode.insertBefore(settingsDiv, statusDiv.nextSibling);
     
     document.getElementById('openSettings').addEventListener('click', (e) => {
       e.preventDefault();
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <small>Saving will update the existing bookmark</small>
     `;
     existingIndicator.style.display = 'block';
-    statusDiv.parentNode.insertBefore(existingIndicator, statusDiv);
+    statusDiv.parentNode.insertBefore(existingIndicator, statusDiv.nextSibling);
   }
   
   // Initialize
