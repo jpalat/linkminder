@@ -1166,7 +1166,6 @@ func getProjectStats() ([]ProjectStat, error) {
 				AND (b.deleted = FALSE OR b.deleted IS NULL)
 			)
 		ORDER BY stats.lastUpdated DESC
-		LIMIT 10
 	`
 	
 	rows, err := db.Query(querySQL)
@@ -2366,7 +2365,6 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 		)
 		GROUP BY topic
 		ORDER BY COUNT(*) DESC, MAX(timestamp) DESC
-		LIMIT 10
 	`
 	
 	rows, err := db.Query(querySQL)
