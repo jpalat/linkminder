@@ -184,7 +184,7 @@ type LogEntry struct {
 
 func initLogging() error {
 	var err error
-	logFile, err = os.OpenFile("bookminderapi.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	logFile, err = os.OpenFile("bookminderapi.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %v", err)
 	}
