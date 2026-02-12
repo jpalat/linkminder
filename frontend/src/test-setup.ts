@@ -39,3 +39,21 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock fetch if needed
 global.fetch = vi.fn()
+
+// Mock localStorage for Pinia devtools and other components
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+  key: vi.fn(),
+  length: 0
+}
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true
+})
+
+// Also set it globally for Node.js context
+global.localStorage = localStorageMock as any
