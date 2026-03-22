@@ -206,7 +206,7 @@ const getSampleBookmarkTitle = (topic: string): string => {
   }
   
   const key = Object.keys(samples).find(k => topic.includes(k))
-  return key ? samples[key] : `${topic} - Latest Resource`
+  return key ? samples[key]! : `${topic} - Latest Resource`
 }
 
 const getSampleDomain = (topic: string): string => {
@@ -220,7 +220,7 @@ const getSampleDomain = (topic: string): string => {
   }
   
   const key = Object.keys(domains).find(k => topic.includes(k))
-  return key ? domains[key] : 'docs.example.com'
+  return key ? domains[key]! : 'docs.example.com'
 }
 
 const getActualDomain = (project: ProjectStat): string => {

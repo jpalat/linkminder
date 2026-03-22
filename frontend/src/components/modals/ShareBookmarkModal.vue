@@ -9,8 +9,8 @@
     <div class="share-bookmark-content">
       <!-- Bookmark Info -->
       <div v-if="bookmarks && bookmarks.length === 1" class="bookmark-info">
-        <h3 class="bookmark-title">{{ bookmarks[0].title }}</h3>
-        <div class="bookmark-url">{{ bookmarks[0].url }}</div>
+        <h3 class="bookmark-title">{{ bookmarks[0]?.title }}</h3>
+        <div class="bookmark-url">{{ bookmarks[0]?.url }}</div>
       </div>
       
       <!-- Multiple Bookmarks Info -->
