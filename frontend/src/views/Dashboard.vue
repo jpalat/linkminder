@@ -252,7 +252,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineOptions } from 'vue'
 import { ref, computed, onMounted } from 'vue'
 
 defineOptions({

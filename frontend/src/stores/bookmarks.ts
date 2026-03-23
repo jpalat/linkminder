@@ -349,7 +349,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       // Remove from local state
       const index = bookmarks.value.findIndex(b => b.id === bookmarkId)
       if (index !== -1) {
-        const deletedBookmark = bookmarks.value[index]
+        const deletedBookmark = bookmarks.value[index]!
         bookmarks.value.splice(index, 1)
         
         // Show success notification
