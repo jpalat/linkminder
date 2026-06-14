@@ -357,7 +357,11 @@ func main() {
 	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
 	http.HandleFunc("/api/bookmarks/", withCORS(handleBookmarkUpdate))
 	http.HandleFunc("/api/bookmark/by-url", withCORS(handleBookmarkByURL))
-	
+
+	// Start MCP server alongside the HTTP server
+	mcpServer := setupMCPServer()
+	go startMCPServer(mcpServer)
+
 	log.Printf("Available endpoints:")
 	log.Printf("  GET / - Dashboard interface")
 	log.Printf("  GET /projects - Projects page interface")
@@ -380,6 +384,11 @@ func main() {
 	log.Printf("  GET /api/bookmark/by-url?url={url} - Get bookmark by URL")
 	log.Printf("  GET /docs - Swagger UI")
 	log.Printf("  GET /api/openapi.yaml - OpenAPI specification")
+	mcpPort := os.Getenv("MCP_PORT")
+	if mcpPort == "" {
+		mcpPort = "9091"
+	}
+	log.Printf("  MCP server: http://localhost:%s (SSE transport)", mcpPort)
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)

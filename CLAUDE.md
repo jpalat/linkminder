@@ -8,8 +8,9 @@ BookMinder API is a simple Go HTTP server that accepts bookmark submissions via 
 
 ## Architecture
 
-- **Single-file application**: All logic is in `main.go`
+- **Main application**: `main.go` (HTTP server) + `mcp.go` (MCP server)
 - **HTTP Server**: Runs on port 9090 using Go's standard `net/http`
+- **MCP Server**: Runs on port 9091 (SSE transport) alongside the HTTP server
 - **Endpoints**: 
   - `POST /bookmark` accepts JSON with `url`, `title`, and optional fields
   - `GET /topics` returns list of available topics
@@ -32,7 +33,7 @@ go mod tidy
 go run main.go
 
 # Build executable
-go build -o bookminderapi main.go
+go build -o bookminderapi .
 
 # Run unit tests
 go test
