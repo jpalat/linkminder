@@ -3501,7 +3501,7 @@ func handleSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	}
 	// Override the default restrictive CSP to allow unpkg CDN assets.
 	w.Header().Set("Content-Security-Policy",
-		"default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://unpkg.com; connect-src 'self'; frame-ancestors 'none';")
+		"default-src 'self'; script-src 'self' https://unpkg.com 'sha256-ZI5gBQledwJqwEel4dvzUCt/50KP809mLOyGnKEPB+o='; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://unpkg.com; connect-src 'self'; frame-ancestors 'none';")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if _, err := w.Write([]byte(swaggerUIHTML)); err != nil {
 		log.Printf("Failed to write Swagger UI response: %v", err)
