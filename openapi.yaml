@@ -1,0 +1,860 @@
+openapi: "3.0.3"
+info:
+  title: BookMinder API
+  version: "1.0.0"
+  description: |
+    API for saving and managing bookmarks with topic/project assignment, triage workflows, and sharing.
+
+    **Bookmark lifecycle:**
+    - `read-later` or empty → needs triage (appears in `/api/bookmarks/triage`)
+    - `working` → actively used for a project (requires topic or projectId)
+    - `share` → ready to share with others
+    - `archived` → completed/finished
+    - `irrelevant` → not useful
+
+    **Project status** is derived from last-activity recency:
+    - `active` — updated within last 7 days
+    - `stale` — updated 7–30 days ago
+    - `inactive` — updated over 30 days ago
+
+servers:
+  - url: http://localhost:9090
+    description: Local development server
+
+tags:
+  - name: Bookmarks
+    description: Bookmark create, read, update, and delete operations
+  - name: Projects
+    description: Project management and detail views
+  - name: Stats
+    description: Dashboard summary statistics
+  - name: Topics
+    description: Legacy topic listing
+
+paths:
+  /bookmark:
+    post:
+      tags: [Bookmarks]
+      summary: Create or update a bookmark
+      description: |
+        Creates a new bookmark for the given URL. If a non-deleted bookmark with the same URL
+        already exists, it is updated instead (upsert). Returns the full bookmark record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookmarkRequest'
+            examples:
+              readLater:
+                summary: Save for later
+                value:
+                  url: "https://example.com/article"
+                  title: "Interesting Article"
+                  description: "An article I want to read"
+              working:
+                summary: Assign to project
+                value:
+                  url: "https://docs.example.com"
+                  title: "API Docs"
+                  action: "working"
+                  topic: "MyProject"
+      responses:
+        '200':
+          description: Bookmark created or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBookmark'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topics:
+    get:
+      tags: [Topics]
+      summary: Get all topic names (legacy)
+      description: Returns a distinct, sorted list of all topic strings stored across bookmarks.
+      responses:
+        '200':
+          description: Topic list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  topics:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Energy", "Go", "React Migration"]
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/stats/summary:
+    get:
+      tags: [Stats]
+      summary: Dashboard summary statistics
+      description: Returns aggregate counts and recent project activity for the dashboard.
+      responses:
+        '200':
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryStats'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/bookmarks/triage:
+    get:
+      tags: [Bookmarks]
+      summary: Get bookmarks needing triage
+      description: Returns paginated bookmarks with no action or action=`read-later`, newest first.
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated triage bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/bookmarks:
+    get:
+      tags: [Bookmarks]
+      summary: Get bookmarks by action
+      description: Returns paginated bookmarks filtered by action type. Defaults to `share`.
+      parameters:
+        - name: action
+          in: query
+          description: Action to filter on (default `share`)
+          schema:
+            type: string
+            enum: [read-later, working, share, archived, irrelevant]
+            default: share
+        - name: limit
+          in: query
+          description: Maximum results to return (default 50)
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/bookmarks/{id}:
+    patch:
+      tags: [Bookmarks]
+      summary: Partially update a bookmark
+      description: |
+        Updates action, shareTo, project assignment, tags, and/or custom properties.
+        Providing `topic` will auto-create a project if one does not exist by that name.
+        Providing `projectId` takes precedence over `topic`.
+        Omitting `topic` and `projectId` clears the project assignment.
+      parameters:
+        - $ref: '#/components/parameters/bookmarkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookmarkUpdateRequest'
+            examples:
+              triage:
+                summary: Assign to a project during triage
+                value:
+                  action: "working"
+                  topic: "Energy"
+              archive:
+                summary: Archive a bookmark
+                value:
+                  action: "archived"
+      responses:
+        '200':
+          description: Updated bookmark
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBookmark'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Bookmarks]
+      summary: Fully replace a bookmark's fields
+      description: |
+        Replaces all updatable fields. `title` and `url` are required.
+        Providing `topic` will auto-create a project if one does not exist by that name.
+      parameters:
+        - $ref: '#/components/parameters/bookmarkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookmarkFullUpdateRequest'
+      responses:
+        '200':
+          description: Updated bookmark
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBookmark'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Bookmarks]
+      summary: Soft-delete a bookmark
+      description: Marks the bookmark as deleted. It will no longer appear in any list endpoints.
+      parameters:
+        - $ref: '#/components/parameters/bookmarkId'
+      responses:
+        '200':
+          description: Bookmark deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Bookmark deleted successfully"
+                  id:
+                    type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/bookmark/by-url:
+    get:
+      tags: [Bookmarks]
+      summary: Look up a bookmark by URL
+      description: Returns the most recent non-deleted bookmark for the given URL.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          description: Exact URL to look up
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Lookup result (check `found` field)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      found:
+                        type: boolean
+                        example: true
+                      bookmark:
+                        $ref: '#/components/schemas/TriageBookmark'
+                  - type: object
+                    properties:
+                      found:
+                        type: boolean
+                        example: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: No bookmark found for this URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  found:
+                    type: boolean
+                    example: false
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List active projects and reference collections
+      description: |
+        Returns two groups:
+        - **activeProjects**: projects in the `projects` table with status=active and at least one bookmark
+        - **referenceCollections**: topics that have bookmarks but no `working`-action bookmark
+      responses:
+        '200':
+          description: Projects and reference collections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+            example:
+              name: "React Migration"
+              description: "Tracking resources for our React 18 migration"
+              status: "active"
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Project name already exists
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project metadata by numeric ID
+      description: |
+        Returns project settings and link count. To get the full list of associated bookmarks,
+        use `GET /api/projects/id/{id}` instead.
+
+        **Routing note:** when `{id}` is a non-numeric string the server routes to the
+        topic-name lookup — see `GET /api/projects/{topic}`.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Projects]
+      summary: Update a project
+      description: Partially or fully updates project name, description, and/or status.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdateRequest'
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Project name already exists
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Projects]
+      summary: Delete a project
+      description: |
+        Deletes the project record and nullifies `project_id` on any associated bookmarks.
+        The bookmarks themselves are not deleted.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      responses:
+        '204':
+          description: Project deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/projects/{topic}:
+    get:
+      tags: [Projects]
+      summary: Get project detail with bookmarks by topic name
+      description: |
+        Returns project metadata and all associated bookmarks, looked up by topic name string.
+
+        **Routing note:** this path only applies when `{topic}` is a non-numeric string.
+        Numeric values are routed to `GET /api/projects/{id}` (project metadata without bookmarks).
+      parameters:
+        - name: topic
+          in: path
+          required: true
+          description: URL-encoded topic name
+          schema:
+            type: string
+          example: "Energy"
+      responses:
+        '200':
+          description: Project detail with all associated bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/projects/id/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project detail with bookmarks by numeric ID
+      description: Returns project metadata and all associated bookmarks, looked up by the project's integer ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Project integer ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Project detail with all associated bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    bookmarkId:
+      name: id
+      in: path
+      required: true
+      description: Bookmark integer ID
+      schema:
+        type: integer
+    projectId:
+      name: id
+      in: path
+      required: true
+      description: Project integer ID
+      schema:
+        type: integer
+    limit:
+      name: limit
+      in: query
+      description: Maximum results to return (default 10)
+      schema:
+        type: integer
+        default: 10
+        minimum: 1
+    offset:
+      name: offset
+      in: query
+      description: Number of results to skip (default 0)
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+
+  responses:
+    BadRequest:
+      description: Bad request — missing or invalid input
+      content:
+        text/plain:
+          schema:
+            type: string
+    NotFound:
+      description: Resource not found
+      content:
+        text/plain:
+          schema:
+            type: string
+    InternalError:
+      description: Internal server error
+      content:
+        text/plain:
+          schema:
+            type: string
+
+  schemas:
+    BookmarkRequest:
+      type: object
+      required: [url, title]
+      properties:
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          example: "https://example.com/article"
+        title:
+          type: string
+          maxLength: 500
+          example: "Interesting Article"
+        description:
+          type: string
+          maxLength: 2000
+        content:
+          type: string
+          description: Full page content, if captured by the browser extension
+        action:
+          type: string
+          enum: [read-later, working, share, archived, irrelevant]
+        shareTo:
+          type: string
+          description: Recipient/destination when action=share
+        topic:
+          type: string
+          description: Legacy project association. Prefer `projectId`.
+        projectId:
+          type: integer
+          description: Preferred project association (references projects.id).
+        tags:
+          type: array
+          items:
+            type: string
+        customProperties:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary key-value metadata
+
+    BookmarkUpdateRequest:
+      type: object
+      description: All fields are optional; omitted fields are unchanged.
+      properties:
+        action:
+          type: string
+          enum: [read-later, working, share, archived, irrelevant]
+        shareTo:
+          type: string
+        topic:
+          type: string
+          description: Project name. Auto-creates the project if it does not exist.
+        projectId:
+          type: integer
+          description: Takes precedence over `topic` when both are provided.
+        tags:
+          type: array
+          items:
+            type: string
+        customProperties:
+          type: object
+          additionalProperties:
+            type: string
+
+    BookmarkFullUpdateRequest:
+      type: object
+      required: [title, url]
+      description: Full replacement of all updatable fields.
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+        action:
+          type: string
+          enum: [read-later, working, share, archived, irrelevant]
+        shareTo:
+          type: string
+        topic:
+          type: string
+          description: Project name. Auto-creates the project if it does not exist.
+        tags:
+          type: array
+          items:
+            type: string
+        customProperties:
+          type: object
+          additionalProperties:
+            type: string
+
+    ProjectBookmark:
+      type: object
+      description: Full bookmark record as returned by create/update/detail endpoints.
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        domain:
+          type: string
+          example: "example.com"
+        age:
+          type: string
+          description: Human-readable age (e.g. "2d", "3h", "1w", "2mo")
+          example: "3d"
+        action:
+          type: string
+          enum: [read-later, working, share, archived, irrelevant]
+        topic:
+          type: string
+        shareTo:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        customProperties:
+          type: object
+          additionalProperties:
+            type: string
+
+    TriageBookmark:
+      type: object
+      description: Bookmark record as returned by triage and by-action list endpoints.
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        domain:
+          type: string
+        age:
+          type: string
+        suggested:
+          type: string
+          description: Heuristically suggested action based on domain/title keywords
+          enum: [read-later, working, share]
+        topic:
+          type: string
+        action:
+          type: string
+        shareTo:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        customProperties:
+          type: object
+          additionalProperties:
+            type: string
+
+    TriageResponse:
+      type: object
+      description: Paginated list of bookmarks.
+      properties:
+        bookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriageBookmark'
+        total:
+          type: integer
+          description: Total matching records before pagination
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    SummaryStats:
+      type: object
+      properties:
+        needsTriage:
+          type: integer
+          description: Bookmarks with no action or action=read-later
+        activeProjects:
+          type: integer
+          description: Count of distinct topics with at least one working-action bookmark
+        readyToShare:
+          type: integer
+          description: Bookmarks with action=share
+        archived:
+          type: integer
+          description: Bookmarks with action=archived
+        totalBookmarks:
+          type: integer
+          description: Total non-deleted bookmarks
+        projectStats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectStat'
+
+    ProjectStat:
+      type: object
+      properties:
+        topic:
+          type: string
+        count:
+          type: integer
+        lastUpdated:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, stale, inactive, unknown]
+        latestURL:
+          type: string
+          format: uri
+        latestTitle:
+          type: string
+
+    Project:
+      type: object
+      description: Project record from the projects table.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, stale, inactive]
+        linkCount:
+          type: integer
+          description: Number of working-action bookmarks associated with this project
+        lastUpdated:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProjectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, stale, inactive]
+          default: active
+
+    ProjectUpdateRequest:
+      type: object
+      description: All fields optional; omitted fields are unchanged.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, stale, inactive]
+
+    ActiveProject:
+      type: object
+      properties:
+        id:
+          type: integer
+        topic:
+          type: string
+        linkCount:
+          type: integer
+        lastUpdated:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, stale, inactive, unknown]
+
+    ReferenceCollection:
+      type: object
+      properties:
+        topic:
+          type: string
+        linkCount:
+          type: integer
+        lastAccessed:
+          type: string
+          format: date-time
+
+    ProjectsResponse:
+      type: object
+      properties:
+        activeProjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveProject'
+        referenceCollections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceCollection'
+
+    ProjectDetailResponse:
+      type: object
+      description: Project metadata plus all associated bookmarks.
+      properties:
+        topic:
+          type: string
+          description: Project name
+        linkCount:
+          type: integer
+        lastUpdated:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, stale, inactive, unknown]
+        bookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBookmark'

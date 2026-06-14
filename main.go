@@ -345,6 +345,8 @@ func main() {
 	http.HandleFunc("/", withCORS(handleDashboard))
 	http.HandleFunc("/projects", withCORS(handleProjectsPage))
 	http.HandleFunc("/project-detail", withCORS(handleProjectDetailPage))
+	http.HandleFunc("/docs", handleSwaggerUI)
+	http.HandleFunc("/api/openapi.yaml", handleOpenAPISpec)
 	http.HandleFunc("/bookmark", withCORS(handleBookmark))
 	http.HandleFunc("/topics", withCORS(handleTopics))
 	http.HandleFunc("/api/stats/summary", withCORS(handleStatsSummary))
@@ -376,6 +378,8 @@ func main() {
 	log.Printf("  PUT /api/bookmarks/{id} - Update a bookmark (full)")
 	log.Printf("  DELETE /api/bookmarks/{id} - Soft delete a bookmark")
 	log.Printf("  GET /api/bookmark/by-url?url={url} - Get bookmark by URL")
+	log.Printf("  GET /docs - Swagger UI")
+	log.Printf("  GET /api/openapi.yaml - OpenAPI specification")
 	
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
@@ -3462,6 +3466,68 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 	})
 	
 	return nil
+}
+
+const swaggerUIHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookMinder API — Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"/>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+window.onload = () => {
+  SwaggerUIBundle({
+    url: "/api/openapi.yaml",
+    dom_id: "#swagger-ui",
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: "BaseLayout",
+    deepLinking: true,
+    tryItOutEnabled: true,
+  });
+};
+</script>
+</body>
+</html>`
+
+func handleSwaggerUI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// Override the default restrictive CSP to allow unpkg CDN assets.
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://unpkg.com; connect-src 'self'; frame-ancestors 'none';")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if _, err := w.Write([]byte(swaggerUIHTML)); err != nil {
+		log.Printf("Failed to write Swagger UI response: %v", err)
+	}
+}
+
+func handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	specBytes, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		log.Printf("Failed to read openapi.yaml: %v", err)
+		if os.IsNotExist(err) {
+			http.Error(w, "OpenAPI spec not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to read OpenAPI spec", http.StatusInternalServerError)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/yaml")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if _, err := w.Write(specBytes); err != nil {
+		log.Printf("Failed to write OpenAPI spec response: %v", err)
+	}
 }
 
 // validateHTMLFile validates that the file path is safe to serve
