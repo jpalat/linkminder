@@ -22,6 +22,7 @@ export interface BackendBookmarkResponse {
   domain?: string
   age?: string
   tags?: string[]
+  ai_summary?: string
   customProperties?: Record<string, string>
 }
 export interface BookmarkCreateRequest {
@@ -70,6 +71,7 @@ export interface TriageBookmark {
   shareTo?: string
   topic?: string
   tags?: string[]
+  ai_summary?: string
   customProperties?: Record<string, string>
 }
 
@@ -236,6 +238,7 @@ class BookmarkService {
       domain: triageBookmark.domain || this.extractDomain(triageBookmark.url),
       age: triageBookmark.age || this.calculateAge(triageBookmark.timestamp),
       tags: triageBookmark.tags,
+      ai_summary: triageBookmark.ai_summary,
       customProperties: triageBookmark.customProperties
     }
   }
@@ -410,6 +413,7 @@ class BookmarkService {
       domain: backendBookmark.domain || this.extractDomain(backendBookmark.url),
       age: backendBookmark.age || this.calculateAge(backendBookmark.timestamp || backendBookmark.created_at),
       tags: backendBookmark.tags || undefined,
+      ai_summary: backendBookmark.ai_summary || undefined,
       customProperties: backendBookmark.customProperties || undefined
     }
   }

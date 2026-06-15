@@ -33,6 +33,7 @@
       <a
         :href="bookmark.url"
         class="bookmark-url"
+        :title="bookmark.url"
         target="_blank"
         rel="noopener noreferrer"
         @click.stop
@@ -52,11 +53,13 @@
         <span v-for="tag in bookmark.tags" :key="tag" class="bookmark-tag">#{{ tag }}</span>
       </div>
 
-      <div v-if="bookmark.description" class="bookmark-description">
-        {{ truncateText(bookmark.description, 120) }}
+      <div v-if="bookmark.ai_summary || bookmark.description" class="bookmark-description">
+        {{ truncateText(bookmark.ai_summary || bookmark.description || '', 200) }}
       </div>
     </div>
-    
+
+    <div class="bookmark-actions-hint" @click.stop="$emit('edit', bookmark.id)" title="Edit">✏️</div>
+
     <div class="bookmark-actions">
       <AppButton
         size="xs"
@@ -174,7 +177,7 @@ const truncateText = (text: string, maxLength: number) => {
   gap: var(--spacing-sm);
   cursor: pointer;
   position: relative;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
 }
 
 .bookmark-card:hover {
@@ -235,13 +238,17 @@ const truncateText = (text: string, maxLength: number) => {
   color: var(--color-primary);
   font-size: 0.8rem;
   margin-bottom: 4px;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: transparent;
   display: block;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: text-decoration-color var(--transition-fast);
 }
 
 .bookmark-url:hover {
-  text-decoration: underline;
+  text-decoration-color: currentColor;
 }
 
 .bookmark-meta {
@@ -284,6 +291,22 @@ const truncateText = (text: string, maxLength: number) => {
   margin-top: var(--spacing-sm);
 }
 
+.bookmark-actions-hint {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  font-size: 12px;
+  opacity: 0.2;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  line-height: 1;
+  padding: 2px;
+}
+
+.bookmark-card:hover .bookmark-actions-hint {
+  opacity: 0;
+}
+
 .bookmark-actions {
   display: flex;
   flex-direction: row;
@@ -324,9 +347,9 @@ const truncateText = (text: string, maxLength: number) => {
   
   .bookmark-url {
     font-size: 0.75rem;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .bookmark-actions {
@@ -349,6 +372,9 @@ const truncateText = (text: string, maxLength: number) => {
 @media (hover: none) and (pointer: coarse) {
   .bookmark-actions {
     opacity: 1 !important;
+  }
+  .bookmark-actions-hint {
+    display: none;
   }
 }
 

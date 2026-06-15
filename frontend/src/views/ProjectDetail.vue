@@ -298,13 +298,13 @@
                 </div>
                 
                 <div class="bookmark-url">
-                  <a :href="bookmark.url" target="_blank" @click.stop>
+                  <a :href="bookmark.url" :title="bookmark.url" target="_blank" @click.stop>
                     {{ bookmark.url }}
                   </a>
                 </div>
-                
-                <div v-if="bookmark.description" class="bookmark-description">
-                  {{ bookmark.description }}
+
+                <div v-if="bookmark.ai_summary || bookmark.description" class="bookmark-description">
+                  {{ bookmark.ai_summary || bookmark.description }}
                 </div>
 
                 <div v-if="bookmark.tags && bookmark.tags.length" class="bookmark-tags">
@@ -1220,13 +1220,18 @@ onMounted(() => {
 
 .bookmark-url a {
   color: var(--color-primary);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: transparent;
   font-size: var(--font-size-sm);
-  word-break: break-all;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: text-decoration-color 0.15s;
 }
 
 .bookmark-url a:hover {
-  text-decoration: underline;
+  text-decoration-color: currentColor;
 }
 
 .bookmark-description {

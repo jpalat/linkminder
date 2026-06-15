@@ -14,6 +14,7 @@ export interface Bookmark {
   domain?: string
   age?: string
   tags?: string[]
+  ai_summary?: string
   customProperties?: Record<string, string>
 }
 
