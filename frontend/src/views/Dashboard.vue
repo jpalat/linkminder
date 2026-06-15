@@ -74,6 +74,12 @@
               </div>
             </div>
 
+            <!-- Active tag filter chip -->
+            <div v-if="filters.tag" class="active-tag-filter">
+              Showing: <strong>#{{ filters.tag }}</strong>
+              <button class="clear-tag-filter" @click="updateFilters({ tag: undefined })">×</button>
+            </div>
+
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
 
@@ -99,6 +105,7 @@
                 @archive="(id) => moveBookmarks([id], 'archived')"
                 @irrelevant="(id) => moveBookmarks([id], 'irrelevant')"
                 @delete="handleDeleteBookmark"
+                @tag-click="handleTagClick"
               />
             </div>
           </div>
@@ -159,17 +166,23 @@
                 </AppButton>
               </div>
             </div>
-            
+
+            <!-- Active tag filter chip -->
+            <div v-if="filters.tag" class="active-tag-filter">
+              Showing: <strong>#{{ filters.tag }}</strong>
+              <button class="clear-tag-filter" @click="updateFilters({ tag: undefined })">×</button>
+            </div>
+
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
-            
+
             <!-- Sort Panel -->
-            <SortPanel 
-              v-if="showSort" 
+            <SortPanel
+              v-if="showSort"
               :current-sort="currentSort"
               @sort-change="setSortOrder"
             />
-            
+
             <div class="section-content">
               <BookmarkList
                 :bookmarks="displayedBookmarks"
@@ -183,6 +196,7 @@
                 @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
                 @delete="handleDeleteBookmark"
+                @tag-click="handleTagClick"
               />
             </div>
           </div>
@@ -617,6 +631,14 @@ const handlePreviewItem = (item: Bookmark) => {
   window.open(item.url, '_blank')
 }
 
+const handleTagClick = (tag: string) => {
+  if (filters.value.tag === tag) {
+    updateFilters({ tag: undefined })
+  } else {
+    updateFilters({ tag })
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   // Debug: Log current server configuration
@@ -817,6 +839,34 @@ onMounted(async () => {
   font-weight: var(--font-weight-normal);
   color: var(--color-gray-500);
   margin-left: var(--spacing-sm);
+}
+
+.active-tag-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-primary-light, #ede9fe);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.clear-tag-filter {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: var(--spacing-xs);
+  border-radius: 50%;
+}
+
+.clear-tag-filter:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 /* Batch Operations Bar */

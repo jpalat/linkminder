@@ -182,6 +182,38 @@
         </div>
       </div>
 
+      <!-- Tags -->
+      <div class="form-group">
+        <label class="form-label">Tags</label>
+        <div class="tag-input-wrapper" @click="focusTagInput">
+          <button
+            v-for="tag in formData.tags"
+            :key="tag"
+            type="button"
+            class="tag-pill-edit"
+            @click.stop="removeTag(tag)"
+          >#{{ tag }} ×</button>
+          <input
+            ref="tagInputEl"
+            v-model="tagInputValue"
+            class="tag-text-input"
+            placeholder="Add tag..."
+            @keydown.enter.prevent="addTagFromInput"
+            @keydown.exact.prevent.comma="addTagFromInput"
+            @keydown.backspace="handleTagBackspace"
+          />
+        </div>
+        <div v-if="suggestedTags.length > 0" class="tag-suggestions">
+          <button
+            v-for="tag in suggestedTags.slice(0, 12)"
+            :key="tag"
+            type="button"
+            class="tag-suggestion-chip"
+            @click="addTag(tag)"
+          >#{{ tag }}</button>
+        </div>
+      </div>
+
       <!-- Metadata Section -->
       <div class="form-group metadata-section">
         <h4 class="metadata-title">Metadata</h4>
@@ -216,33 +248,6 @@
         </button>
         
         <div v-if="showAdvanced" class="advanced-options">
-          <!-- Tags Input -->
-          <div class="advanced-field">
-            <label for="edit-tags" class="form-label">Tags (comma-separated)</label>
-            <AppInput
-              id="edit-tags"
-              v-model="tagsInput"
-              placeholder="tag1, tag2, tag3"
-              @input="updateTags"
-            />
-            <div v-if="formData.tags && formData.tags.length > 0" class="current-tags">
-              <span
-                v-for="tag in formData.tags"
-                :key="tag"
-                class="tag-chip"
-              >
-                #{{ tag }}
-                <button
-                  type="button"
-                  class="tag-remove"
-                  @click="removeTag(tag)"
-                >
-                  ×
-                </button>
-              </span>
-            </div>
-          </div>
-
           <!-- Custom Fields -->
           <div class="advanced-field">
             <label class="form-label">Custom Properties</label>
@@ -315,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Bookmark } from '@/types'
 import AppModal from '@/components/ui/AppModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -348,7 +353,7 @@ const emit = defineEmits<{
 
 // Store access
 const bookmarkStore = useBookmarkStore()
-const { availableShareDestinations } = storeToRefs(bookmarkStore)
+const { availableShareDestinations, availableTags } = storeToRefs(bookmarkStore)
 
 // Form state
 const formData = ref<FormData | null>(null)
@@ -356,8 +361,13 @@ const errors = ref<Record<string, string>>({})
 const isSubmitting = ref(false)
 const showContentEditor = ref(false)
 const showAdvanced = ref(false)
-const tagsInput = ref('')
+const tagInputValue = ref('')
+const tagInputEl = ref<HTMLInputElement | null>(null)
 const customProperties = ref<CustomProperty[]>([])
+
+const suggestedTags = computed(() =>
+  availableTags.value.filter(t => !formData.value?.tags?.includes(t))
+)
 
 // Action options
 const actionOptions = [
@@ -392,8 +402,8 @@ watch(
   () => props.bookmark,
   (newBookmark) => {
     if (newBookmark) {
-      formData.value = { ...newBookmark }
-      tagsInput.value = newBookmark.tags ? newBookmark.tags.join(', ') : ''
+      formData.value = { ...newBookmark, tags: newBookmark.tags ? [...newBookmark.tags] : [] }
+      tagInputValue.value = ''
       // Reset advanced options
       showAdvanced.value = false
       showContentEditor.value = false
@@ -491,22 +501,32 @@ const selectTopic = (topic: string) => {
 }
 
 // Tags handling
-const updateTags = () => {
+const focusTagInput = () => tagInputEl.value?.focus()
+
+const addTagFromInput = () => {
   if (!formData.value) return
-  
-  const tags = tagsInput.value
-    .split(',')
-    .map(tag => tag.trim())
-    .filter(tag => tag.length > 0)
-  
-  formData.value.tags = tags.length > 0 ? tags : undefined
+  const tag = tagInputValue.value.trim().replace(/,$/, '')
+  if (!tag) return
+  if (!formData.value.tags) formData.value.tags = []
+  if (!formData.value.tags.includes(tag)) formData.value.tags.push(tag)
+  tagInputValue.value = ''
+}
+
+const addTag = (tag: string) => {
+  if (!formData.value) return
+  if (!formData.value.tags) formData.value.tags = []
+  if (!formData.value.tags.includes(tag)) formData.value.tags.push(tag)
 }
 
 const removeTag = (tagToRemove: string) => {
   if (!formData.value?.tags) return
-  
-  formData.value.tags = formData.value.tags.filter(tag => tag !== tagToRemove)
-  tagsInput.value = formData.value.tags.join(', ')
+  formData.value.tags = formData.value.tags.filter(t => t !== tagToRemove)
+}
+
+const handleTagBackspace = () => {
+  if (tagInputValue.value === '' && formData.value?.tags?.length) {
+    formData.value.tags.pop()
+  }
 }
 
 // Custom properties handling
@@ -565,15 +585,13 @@ const handleDelete = () => {
 }
 
 const handleClose = () => {
-  // Reset form state
   formData.value = null
   errors.value = {}
   isSubmitting.value = false
   showContentEditor.value = false
   showAdvanced.value = false
-  tagsInput.value = ''
+  tagInputValue.value = ''
   customProperties.value = []
-  
   emit('update:show', false)
 }
 </script>
@@ -842,42 +860,75 @@ const handleClose = () => {
 }
 
 /* Tags */
-.current-tags {
+.tag-input-wrapper {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
-  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: text;
+  min-height: 42px;
+  align-items: center;
+  transition: border-color var(--transition-fast);
 }
 
-.tag-chip {
-  background: var(--color-gray-100);
-  color: var(--color-gray-700);
-  padding: var(--spacing-xs) var(--spacing-sm);
+.tag-input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.tag-pill-edit {
+  background: var(--color-primary-light, #ede9fe);
+  color: var(--color-primary);
+  border: none;
+  padding: 2px 8px;
   border-radius: var(--radius-xl);
   font-size: var(--font-size-sm);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: var(--color-gray-500);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  font-size: var(--font-size-sm);
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
 }
 
-.tag-remove:hover {
-  background: var(--color-gray-300);
-  color: var(--color-gray-700);
+.tag-pill-edit:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.tag-text-input {
+  border: none;
+  outline: none;
+  font-size: var(--font-size-sm);
+  background: transparent;
+  min-width: 120px;
+  flex: 1;
+  padding: 2px 0;
+  font-family: inherit;
+}
+
+.tag-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.tag-suggestion-chip {
+  background: var(--color-gray-100);
+  color: var(--color-gray-600);
+  border: 1px solid var(--border-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tag-suggestion-chip:hover {
+  background: var(--color-primary-light, #ede9fe);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 /* Custom properties */

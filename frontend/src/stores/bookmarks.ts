@@ -85,6 +85,12 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       filtered = filtered.filter(b => b.domain === filters.value.domain)
     }
 
+    // Apply tag filter
+    if (filters.value.tag) {
+      const tag = filters.value.tag
+      filtered = filtered.filter(b => b.tags?.includes(tag))
+    }
+
     // Apply age filter
     if (filters.value.age) {
       const now = new Date()
@@ -218,6 +224,14 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
       }
     })
     return Array.from(domains).sort()
+  })
+
+  const availableTags = computed(() => {
+    const tags = new Set<string>()
+    bookmarks.value.forEach(b => {
+      b.tags?.forEach(tag => tags.add(tag))
+    })
+    return Array.from(tags).sort()
   })
 
   const availableShareDestinations = computed(() => {
@@ -494,6 +508,7 @@ export const useBookmarkStore = defineStore('bookmarks', () => {
     shareGroups,
     availableTopics,
     availableDomains,
+    availableTags,
     availableShareDestinations,
     
     // Actions

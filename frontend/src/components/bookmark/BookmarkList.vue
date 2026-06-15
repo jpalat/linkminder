@@ -34,6 +34,7 @@
         @archive="$emit('archive', $event)"
         @irrelevant="$emit('irrelevant', $event)"
         @delete="$emit('delete', $event)"
+        @tag-click="$emit('tag-click', $event)"
         @click="handleBookmarkClick"
       />
     </TransitionGroup>
@@ -73,6 +74,7 @@ const emit = defineEmits<{
   'archive': [id: string]
   'irrelevant': [id: string]
   'delete': [id: string]
+  'tag-click': [tag: string]
   'bookmark-click': [bookmark: Bookmark]
 }>()
 

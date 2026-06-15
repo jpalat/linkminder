@@ -51,7 +51,13 @@
       </div>
       
       <div v-if="bookmark.tags && bookmark.tags.length" class="bookmark-tags">
-        <span v-for="tag in bookmark.tags" :key="tag" class="bookmark-tag">#{{ tag }}</span>
+        <button
+          v-for="tag in bookmark.tags"
+          :key="tag"
+          type="button"
+          class="bookmark-tag"
+          @click.stop="$emit('tag-click', tag)"
+        >#{{ tag }}</button>
       </div>
 
       <div v-if="bookmark.ai_summary || bookmark.description" class="bookmark-description">
@@ -141,6 +147,7 @@ const emit = defineEmits<{
   'archive': [id: string]
   'irrelevant': [id: string]
   'delete': [id: string]
+  'tag-click': [tag: string]
   'click': [bookmark: Bookmark]
 }>()
 
@@ -297,6 +304,14 @@ const truncateText = (text: string, maxLength: number) => {
   border-radius: var(--radius-xl);
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.bookmark-tag:hover {
+  background: var(--color-primary);
+  color: white;
 }
 
 .bookmark-description {

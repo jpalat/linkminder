@@ -45,6 +45,7 @@ export interface FilterState {
   domain?: string
   age?: string
   action?: string
+  tag?: string
 }
 
 export interface ShareGroup {
