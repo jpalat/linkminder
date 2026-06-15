@@ -30,14 +30,15 @@
             />
           </div>
           <div class="header-actions">
-            <button 
+            <router-link to="/mcp" class="header-btn" title="MCP Setup">🔌</router-link>
+            <button
               class="header-btn"
               @click="toggleBatchMode"
               :class="{ active: batchMode }"
             >
               {{ batchMode ? '✕' : '☑' }}
             </button>
-            <button 
+            <button
               class="header-btn header-btn-primary"
               @click="showAddModal = true"
             >

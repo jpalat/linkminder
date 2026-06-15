@@ -15,6 +15,11 @@ const router = createRouter({
       // route level code-splitting for project detail page
       component: () => import('../views/ProjectDetail.vue'),
     },
+    {
+      path: '/mcp',
+      name: 'mcp-docs',
+      component: () => import('../views/McpDocs.vue'),
+    },
   ],
 })
 
