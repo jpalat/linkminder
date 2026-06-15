@@ -1387,13 +1387,13 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 
 	// Get the bookmarks
 	querySQL := `
-		SELECT id, url, title, description, timestamp, topic 
-		FROM bookmarks 
+		SELECT id, url, title, description, timestamp, topic, tags
+		FROM bookmarks
 		WHERE (action IS NULL OR action = '' OR action = 'read-later') AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
 	`
-	
+
 	rows, err := db.Query(querySQL, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query triage bookmarks: %v", err)
@@ -1408,25 +1408,21 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 	for rows.Next() {
 		var bookmark TriageBookmark
 		var timestamp string
-		var description, topic sql.NullString
-		
-		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic)
+		var description, topic, tagsJSON sql.NullString
+
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic, &tagsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan triage bookmark: %v", err)
 		}
-		
-		// Handle nullable description (store raw data)
+
 		if description.Valid {
 			bookmark.Description = description.String
-		} else {
-			bookmark.Description = ""
 		}
-		
-		// Handle nullable topic (store raw data)
 		if topic.Valid {
 			bookmark.Topic = topic.String
-		} else {
-			bookmark.Topic = ""
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
 		
 		// Store raw data (HTML escaping will be handled by frontend for display)
@@ -2660,12 +2656,12 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 
 func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 	querySQL := `
-		SELECT id, url, title, description, content, timestamp, action
-		FROM bookmarks 
+		SELECT id, url, title, description, content, timestamp, action, tags
+		FROM bookmarks
 		WHERE topic = ? AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 	`
-	
+
 	rows, err := db.Query(querySQL, topic)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project bookmarks: %v", err)
@@ -2680,14 +2676,14 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 	for rows.Next() {
 		var bookmark ProjectBookmark
 		var timestamp string
-		var description, content, action sql.NullString
-		
-		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, 
-			&description, &content, &timestamp, &action)
+		var description, content, action, tagsJSON sql.NullString
+
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title,
+			&description, &content, &timestamp, &action, &tagsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
-		
+
 		// Handle nullable fields (store raw data)
 		if description.Valid {
 			bookmark.Description = description.String
@@ -2697,6 +2693,9 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 		}
 		if action.Valid {
 			bookmark.Action = action.String
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
 		
 		// Store raw data (HTML escaping will be handled by frontend for display)
@@ -2826,12 +2825,12 @@ func getProjectDetailByID(projectID int) (*ProjectDetailResponse, error) {
 
 func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 	querySQL := `
-		SELECT id, url, title, description, content, timestamp, action
-		FROM bookmarks 
+		SELECT id, url, title, description, content, timestamp, action, tags
+		FROM bookmarks
 		WHERE project_id = ? AND (deleted = FALSE OR deleted IS NULL)
 		ORDER BY timestamp DESC
 	`
-	
+
 	rows, err := db.Query(querySQL, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project bookmarks: %v", err)
@@ -2846,14 +2845,14 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 	for rows.Next() {
 		var bookmark ProjectBookmark
 		var timestamp string
-		var description, content, action sql.NullString
-		
-		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, 
-			&description, &content, &timestamp, &action)
+		var description, content, action, tagsJSON sql.NullString
+
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title,
+			&description, &content, &timestamp, &action, &tagsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project bookmark: %v", err)
 		}
-		
+
 		// Handle nullable fields (store raw data)
 		if description.Valid {
 			bookmark.Description = description.String
@@ -2863,6 +2862,9 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 		}
 		if action.Valid {
 			bookmark.Action = action.String
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
 		
 		// Store raw data (HTML escaping will be handled by frontend for display)

@@ -48,6 +48,10 @@
         </span>
       </div>
       
+      <div v-if="bookmark.tags && bookmark.tags.length" class="bookmark-tags">
+        <span v-for="tag in bookmark.tags" :key="tag" class="bookmark-tag">#{{ tag }}</span>
+      </div>
+
       <div v-if="bookmark.description" class="bookmark-description">
         {{ truncateText(bookmark.description, 120) }}
       </div>
@@ -254,6 +258,23 @@ const truncateText = (text: string, maxLength: number) => {
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-xl);
   font-size: var(--font-size-xs);
+}
+
+.bookmark-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--spacing-xs);
+}
+
+.bookmark-tag {
+  font-size: 11px;
+  color: var(--color-primary);
+  background: var(--color-primary-light, #ede9fe);
+  padding: 2px 7px;
+  border-radius: var(--radius-xl);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 .bookmark-description {

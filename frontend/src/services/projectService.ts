@@ -21,6 +21,7 @@ export interface BackendBookmark {
   domain?: string
   age?: string
   action?: string
+  tags?: string[]
 }
 
 export interface ProjectsResponse {
@@ -118,7 +119,8 @@ class ProjectService {
       action: backendBookmark.action as BookmarkAction,
       timestamp: backendBookmark.timestamp,
       domain: backendBookmark.domain || this.extractDomain(backendBookmark.url),
-      age: backendBookmark.age || this.calculateAge(backendBookmark.timestamp)
+      age: backendBookmark.age || this.calculateAge(backendBookmark.timestamp),
+      tags: backendBookmark.tags
     }
   }
 

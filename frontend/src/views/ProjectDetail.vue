@@ -306,7 +306,11 @@
                 <div v-if="bookmark.description" class="bookmark-description">
                   {{ bookmark.description }}
                 </div>
-                
+
+                <div v-if="bookmark.tags && bookmark.tags.length" class="bookmark-tags">
+                  <span v-for="tag in bookmark.tags" :key="tag" class="bookmark-tag">#{{ tag }}</span>
+                </div>
+
                 <div class="bookmark-meta">
                   <span class="meta-item">
                     🌐 {{ bookmark.domain }}
@@ -1230,6 +1234,23 @@ onMounted(() => {
   font-size: var(--font-size-base);
   line-height: 1.5;
   margin-bottom: var(--spacing-sm);
+}
+
+.bookmark-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--spacing-sm);
+}
+
+.bookmark-tag {
+  font-size: 11px;
+  color: var(--color-primary);
+  background: var(--color-primary-light, #ede9fe);
+  padding: 2px 7px;
+  border-radius: var(--radius-xl);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 .bookmark-meta {
