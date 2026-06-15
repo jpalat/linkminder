@@ -58,7 +58,8 @@
           <div v-if="currentTab === 'triage'" class="section">
             <div class="section-header">
               <div class="section-title">
-                🔍 Triage Queue
+                🔍 Triage
+                <span v-if="dashboardStats.needsTriage > 0" class="section-count">{{ dashboardStats.needsTriage }} to review</span>
               </div>
               <div class="section-actions">
                 <AppButton size="sm" variant="secondary" @click="showFilters = !showFilters">
@@ -72,17 +73,17 @@
                 </AppButton>
               </div>
             </div>
-            
+
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
-            
+
             <!-- Sort Panel -->
-            <SortPanel 
-              v-if="showSort" 
+            <SortPanel
+              v-if="showSort"
               :current-sort="currentSort"
               @sort-change="setSortOrder"
             />
-            
+
             <div class="section-content">
               <BookmarkList
                 :bookmarks="displayedBookmarks"
@@ -90,11 +91,13 @@
                 :total-count="isGlobalSearchActive ? bookmarks.length : totalBookmarksForCurrentTab"
                 :show-results-count="!!(hasActiveFilters || isGlobalSearchActive)"
                 :loading="loading"
+                :always-show-actions="true"
                 @toggle-selection="toggleSelection"
                 @edit="handleEdit"
                 @move-to-working="handleMoveToWorking"
                 @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
+                @irrelevant="(id) => moveBookmarks([id], 'irrelevant')"
                 @delete="handleDeleteBookmark"
               />
             </div>
@@ -807,6 +810,13 @@ onMounted(async () => {
 .section-actions {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+.section-count {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-gray-500);
+  margin-left: var(--spacing-sm);
 }
 
 /* Batch Operations Bar */

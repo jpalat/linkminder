@@ -26,11 +26,13 @@
         :bookmark="bookmark"
         :selected="selectedItems.has(bookmark.id)"
         :batch-mode="batchMode"
+        :always-show-actions="alwaysShowActions"
         @toggle-selection="$emit('toggle-selection', $event)"
         @edit="$emit('edit', $event)"
         @move-to-working="$emit('move-to-working', $event)"
         @move-to-share="$emit('move-to-share', $event)"
         @archive="$emit('archive', $event)"
+        @irrelevant="$emit('irrelevant', $event)"
         @delete="$emit('delete', $event)"
         @click="handleBookmarkClick"
       />
@@ -52,13 +54,15 @@ interface Props {
   emptyMessage?: string
   totalCount?: number
   showResultsCount?: boolean
+  alwaysShowActions?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   batchMode: false,
   loading: false,
   emptyMessage: 'Try adding some bookmarks or adjusting your filters.',
-  showResultsCount: false
+  showResultsCount: false,
+  alwaysShowActions: false
 })
 
 const emit = defineEmits<{
@@ -67,6 +71,7 @@ const emit = defineEmits<{
   'move-to-working': [id: string]
   'move-to-share': [id: string]
   'archive': [id: string]
+  'irrelevant': [id: string]
   'delete': [id: string]
   'bookmark-click': [bookmark: Bookmark]
 }>()

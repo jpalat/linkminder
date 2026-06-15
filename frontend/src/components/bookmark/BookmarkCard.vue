@@ -4,7 +4,8 @@
       'bookmark-card',
       {
         'bookmark-card-selected': selected,
-        'bookmark-card-batch-mode': batchMode
+        'bookmark-card-batch-mode': batchMode,
+        'bookmark-card-actions-visible': alwaysShowActions
       }
     ]"
     @click="handleCardClick"
@@ -58,13 +59,14 @@
       </div>
     </div>
 
-    <div class="bookmark-actions-hint" @click.stop="$emit('edit', bookmark.id)" title="Edit">✏️</div>
+    <div v-if="!alwaysShowActions" class="bookmark-actions-hint" @click.stop="$emit('edit', bookmark.id)" title="Edit">✏️</div>
 
     <div class="bookmark-actions">
       <AppButton
         size="xs"
         variant="secondary"
         @click.stop="$emit('edit', bookmark.id)"
+        title="Edit"
       >
         ✏️
       </AppButton>
@@ -93,6 +95,16 @@
         Archive
       </AppButton>
       <AppButton
+        v-if="alwaysShowActions && bookmark.action !== 'irrelevant'"
+        size="xs"
+        variant="secondary"
+        @click.stop="$emit('irrelevant', bookmark.id)"
+        title="Mark irrelevant"
+      >
+        Skip
+      </AppButton>
+      <AppButton
+        v-if="!alwaysShowActions"
         size="xs"
         variant="danger"
         @click.stop="$emit('delete', bookmark.id)"
@@ -112,11 +124,13 @@ interface Props {
   bookmark: Bookmark
   selected?: boolean
   batchMode?: boolean
+  alwaysShowActions?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   selected: false,
-  batchMode: false
+  batchMode: false,
+  alwaysShowActions: false
 })
 
 const emit = defineEmits<{
@@ -125,6 +139,7 @@ const emit = defineEmits<{
   'move-to-working': [id: string]
   'move-to-share': [id: string]
   'archive': [id: string]
+  'irrelevant': [id: string]
   'delete': [id: string]
   'click': [bookmark: Bookmark]
 }>()
@@ -319,6 +334,15 @@ const truncateText = (text: string, maxLength: number) => {
 
 .bookmark-card:hover .bookmark-actions {
   opacity: 1;
+}
+
+.bookmark-card-actions-visible .bookmark-actions {
+  opacity: 1;
+}
+
+.bookmark-card-actions-visible.bookmark-card:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Mobile responsiveness */
