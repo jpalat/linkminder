@@ -101,6 +101,15 @@ export interface TopicsResponse {
   topics: string[]
 }
 
+export interface TagCount {
+  tag: string
+  count: number
+}
+
+export interface TagsResponse {
+  tags: TagCount[]
+}
+
 class BookmarkService {
   /**
    * Create a new bookmark
@@ -167,6 +176,25 @@ class BookmarkService {
    */
   async getTopics(): Promise<string[]> {
     const response = await apiClient.get<string[]>('/topics')
+    return response.data
+  }
+
+  /**
+   * Get all tags with counts
+   * GET /api/tags
+   */
+  async getTags(): Promise<TagsResponse> {
+    const response = await apiClient.get<TagsResponse>('/api/tags')
+    return response.data
+  }
+
+  /**
+   * Get bookmarks for a specific tag
+   * GET /api/bookmarks/by-tag/{tag}
+   */
+  async getBookmarksByTag(tag: string, limit = 200, offset = 0): Promise<TriageResponse> {
+    const encoded = encodeURIComponent(tag)
+    const response = await apiClient.get<TriageResponse>(`/api/bookmarks/by-tag/${encoded}`, { limit, offset })
     return response.data
   }
 

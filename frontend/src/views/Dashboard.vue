@@ -30,6 +30,7 @@
             />
           </div>
           <div class="header-actions">
+            <router-link to="/tags" class="header-btn" title="Browse Tags">#</router-link>
             <router-link to="/mcp" class="header-btn" title="MCP Setup">🔌</router-link>
             <button
               class="header-btn"
@@ -74,12 +75,6 @@
               </div>
             </div>
 
-            <!-- Active tag filter chip -->
-            <div v-if="filters.tag" class="active-tag-filter">
-              Showing: <strong>#{{ filters.tag }}</strong>
-              <button class="clear-tag-filter" @click="updateFilters({ tag: undefined })">×</button>
-            </div>
-
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
 
@@ -105,7 +100,6 @@
                 @archive="(id) => moveBookmarks([id], 'archived')"
                 @irrelevant="(id) => moveBookmarks([id], 'irrelevant')"
                 @delete="handleDeleteBookmark"
-                @tag-click="handleTagClick"
               />
             </div>
           </div>
@@ -167,12 +161,6 @@
               </div>
             </div>
 
-            <!-- Active tag filter chip -->
-            <div v-if="filters.tag" class="active-tag-filter">
-              Showing: <strong>#{{ filters.tag }}</strong>
-              <button class="clear-tag-filter" @click="updateFilters({ tag: undefined })">×</button>
-            </div>
-
             <!-- Filter Panel -->
             <FilterPanel v-if="showFilters" />
 
@@ -196,7 +184,6 @@
                 @move-to-share="handleShareSingle"
                 @archive="(id) => moveBookmarks([id], 'archived')"
                 @delete="handleDeleteBookmark"
-                @tag-click="handleTagClick"
               />
             </div>
           </div>
@@ -626,17 +613,7 @@ const moveSelectedTo = (action: string) => {
 }
 
 const handlePreviewItem = (item: Bookmark) => {
-  // For now, just open the URL in a new tab
-  // This could be enhanced with a modal preview in the future
   window.open(item.url, '_blank')
-}
-
-const handleTagClick = (tag: string) => {
-  if (filters.value.tag === tag) {
-    updateFilters({ tag: undefined })
-  } else {
-    updateFilters({ tag })
-  }
 }
 
 // Lifecycle
@@ -841,33 +818,6 @@ onMounted(async () => {
   margin-left: var(--spacing-sm);
 }
 
-.active-tag-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--color-primary-light, #ede9fe);
-  color: var(--color-primary);
-  font-size: var(--font-size-sm);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-sm);
-}
-
-.clear-tag-filter {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0 2px;
-  margin-left: var(--spacing-xs);
-  border-radius: 50%;
-}
-
-.clear-tag-filter:hover {
-  background: rgba(0, 0, 0, 0.1);
-}
 
 /* Batch Operations Bar */
 .batch-bar {

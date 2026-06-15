@@ -51,13 +51,13 @@
       </div>
       
       <div v-if="bookmark.tags && bookmark.tags.length" class="bookmark-tags">
-        <button
+        <router-link
           v-for="tag in bookmark.tags"
           :key="tag"
-          type="button"
+          :to="`/tags/${encodeURIComponent(tag)}`"
           class="bookmark-tag"
-          @click.stop="$emit('tag-click', tag)"
-        >#{{ tag }}</button>
+          @click.stop
+        >#{{ tag }}</router-link>
       </div>
 
       <div v-if="bookmark.ai_summary || bookmark.description" class="bookmark-description">
@@ -147,7 +147,6 @@ const emit = defineEmits<{
   'archive': [id: string]
   'irrelevant': [id: string]
   'delete': [id: string]
-  'tag-click': [tag: string]
   'click': [bookmark: Bookmark]
 }>()
 

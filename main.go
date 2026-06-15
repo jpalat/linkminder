@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -110,6 +111,7 @@ type TriageBookmark struct {
 	URL              string            `json:"url"`
 	Title            string            `json:"title"`
 	Description      string            `json:"description"`
+	AISummary        string            `json:"ai_summary,omitempty"`
 	Timestamp        string            `json:"timestamp"`
 	Domain           string            `json:"domain"`
 	Age              string            `json:"age"`
@@ -126,6 +128,15 @@ type TriageResponse struct {
 	Total     int              `json:"total"`
 	Limit     int              `json:"limit"`
 	Offset    int              `json:"offset"`
+}
+
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+type TagsResponse struct {
+	Tags []TagCount `json:"tags"`
 }
 
 type ActiveProject struct {
@@ -351,7 +362,9 @@ func main() {
 	http.HandleFunc("/topics", withCORS(handleTopics))
 	http.HandleFunc("/api/stats/summary", withCORS(handleStatsSummary))
 	http.HandleFunc("/api/bookmarks/triage", withCORS(handleTriageQueue))
+	http.HandleFunc("/api/bookmarks/by-tag/", withCORS(handleBookmarksByTag))
 	http.HandleFunc("/api/bookmarks", withCORS(handleBookmarks))
+	http.HandleFunc("/api/tags", withCORS(handleTagsList))
 	http.HandleFunc("/api/projects", withCORS(handleProjects))
 	http.HandleFunc("/api/projects/", withCORS(handleProjectDetail))
 	http.HandleFunc("/api/projects/id/", withCORS(handleProjectByID))
@@ -1580,6 +1593,188 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 		Limit:     limit,
 		Offset:    offset,
 	}, nil
+}
+
+func getTagsWithCounts() (*TagsResponse, error) {
+	rows, err := db.Query(`
+		SELECT tags FROM bookmarks
+		WHERE tags IS NOT NULL AND tags != '' AND tags != '[]'
+		AND (deleted = FALSE OR deleted IS NULL)
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tags: %v", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var tagsJSON string
+		if err := rows.Scan(&tagsJSON); err != nil {
+			continue
+		}
+		var tags []string
+		if err := json.Unmarshal([]byte(tagsJSON), &tags); err == nil {
+			for _, tag := range tags {
+				if tag != "" {
+					counts[tag]++
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating tag rows: %v", err)
+	}
+
+	tagCounts := make([]TagCount, 0, len(counts))
+	for tag, count := range counts {
+		tagCounts = append(tagCounts, TagCount{Tag: tag, Count: count})
+	}
+	sort.Slice(tagCounts, func(i, j int) bool {
+		if tagCounts[i].Count != tagCounts[j].Count {
+			return tagCounts[i].Count > tagCounts[j].Count
+		}
+		return tagCounts[i].Tag < tagCounts[j].Tag
+	})
+
+	return &TagsResponse{Tags: tagCounts}, nil
+}
+
+func getBookmarksByTag(tag string, limit, offset int) (*TriageResponse, error) {
+	tagPattern := `%"` + tag + `"%`
+
+	var total int
+	err := db.QueryRow(`
+		SELECT COUNT(*) FROM bookmarks
+		WHERE (deleted = FALSE OR deleted IS NULL) AND tags LIKE ?
+	`, tagPattern).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count bookmarks for tag: %v", err)
+	}
+
+	rows, err := db.Query(`
+		SELECT id, url, title, description, timestamp, topic, action, shareTo, tags, ai_summary
+		FROM bookmarks
+		WHERE (deleted = FALSE OR deleted IS NULL) AND tags LIKE ?
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`, tagPattern, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bookmarks for tag: %v", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
+
+	var bookmarks []TriageBookmark
+	for rows.Next() {
+		var bookmark TriageBookmark
+		var timestamp string
+		var description, topic, action, shareTo, tagsJSON, aiSummary sql.NullString
+
+		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description,
+			&timestamp, &topic, &action, &shareTo, &tagsJSON, &aiSummary)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bookmark for tag: %v", err)
+		}
+
+		if description.Valid { bookmark.Description = description.String }
+		if topic.Valid { bookmark.Topic = topic.String }
+		if action.Valid { bookmark.Action = action.String }
+		if shareTo.Valid { bookmark.ShareTo = shareTo.String }
+		if aiSummary.Valid { bookmark.AISummary = aiSummary.String }
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			bookmark.Tags = tagsFromJSON(tagsJSON.String)
+		}
+
+		if bookmark.URL == "" {
+			bookmark.Domain = ""
+		} else if u, err := url.Parse(bookmark.URL); err == nil && u.Host != "" {
+			bookmark.Domain = u.Host
+		} else {
+			bookmark.Domain = bookmark.URL
+		}
+
+		bookmark.Age = calculateAge(timestamp)
+		bookmark.Timestamp = timestamp
+
+		bookmarks = append(bookmarks, bookmark)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating bookmark rows for tag: %v", err)
+	}
+
+	return &TriageResponse{
+		Bookmarks: bookmarks,
+		Total:     total,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+func handleTagsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	tagsData, err := getTagsWithCounts()
+	if err != nil {
+		log.Printf("Failed to get tags: %v", err)
+		http.Error(w, "Failed to get tags", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(tagsData); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+func handleBookmarksByTag(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract tag from URL: /api/bookmarks/by-tag/{tag}
+	tag := strings.TrimPrefix(r.URL.Path, "/api/bookmarks/by-tag/")
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		http.Error(w, "Tag is required", http.StatusBadRequest)
+		return
+	}
+
+	query := r.URL.Query()
+	limit := 200
+	offset := 0
+	if l := query.Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	if o := query.Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	data, err := getBookmarksByTag(tag, limit, offset)
+	if err != nil {
+		log.Printf("Failed to get bookmarks for tag %s: %v", sanitizeForLog(tag), err)
+		http.Error(w, "Failed to get bookmarks", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 func getSuggestedAction(domain, title, description string) string {

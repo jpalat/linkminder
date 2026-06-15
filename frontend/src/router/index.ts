@@ -20,6 +20,16 @@ const router = createRouter({
       name: 'mcp-docs',
       component: () => import('../views/McpDocs.vue'),
     },
+    {
+      path: '/tags',
+      name: 'tags-index',
+      component: () => import('../views/TagsIndex.vue'),
+    },
+    {
+      path: '/tags/:tag',
+      name: 'tag-view',
+      component: () => import('../views/TagView.vue'),
+    },
   ],
 })
 
