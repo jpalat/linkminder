@@ -211,7 +211,11 @@ func handleMCPListBookmarks(_ context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	if err != nil {
 		return mcp.NewToolResultText(fmt.Sprintf("error querying bookmarks: %v", err)), nil
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var results []row
 	for rows.Next() {
@@ -231,8 +235,10 @@ func handleMCPListBookmarks(_ context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	}
 
 	var total int
-	db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM bookmarks b WHERE %s",
-		strings.Join(where[:len(where)-0], " AND ")), params[:len(params)-2]...).Scan(&total)
+	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM bookmarks b WHERE %s",
+		strings.Join(where, " AND ")), params[:len(params)-2]...).Scan(&total); err != nil {
+		log.Printf("Failed to count bookmarks: %v", err)
+	}
 
 	out, _ := json.MarshalIndent(map[string]interface{}{
 		"bookmarks": results,
@@ -412,7 +418,11 @@ func handleMCPListProjects(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallT
 	if err != nil {
 		return mcp.NewToolResultText(fmt.Sprintf("error: %v", err)), nil
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
 
 	var projects []projectRow
 	for rows.Next() {
