@@ -98,12 +98,12 @@ type ProjectStat struct {
 }
 
 type SummaryStats struct {
-	NeedsTriage     int           `json:"needsTriage"`
-	ActiveProjects  int           `json:"activeProjects"`
-	ReadyToShare    int           `json:"readyToShare"`
-	Archived        int           `json:"archived"`
-	TotalBookmarks  int           `json:"totalBookmarks"`
-	ProjectStats    []ProjectStat `json:"projectStats"`
+	NeedsTriage    int           `json:"needsTriage"`
+	ActiveProjects int           `json:"activeProjects"`
+	ReadyToShare   int           `json:"readyToShare"`
+	Archived       int           `json:"archived"`
+	TotalBookmarks int           `json:"totalBookmarks"`
+	ProjectStats   []ProjectStat `json:"projectStats"`
 }
 
 type TriageBookmark struct {
@@ -186,10 +186,10 @@ var db *sql.DB
 var logFile *os.File
 
 type LogEntry struct {
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	Message   string `json:"message"`
-	Component string `json:"component"`
+	Timestamp string                 `json:"timestamp"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	Component string                 `json:"component"`
 	Data      map[string]interface{} `json:"data,omitempty"`
 }
 
@@ -199,7 +199,7 @@ func initLogging() error {
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %v", err)
 	}
-	
+
 	log.Printf("Structured logging initialized: bookminderapi.log")
 	logStructured("INFO", "system", "Logging system initialized", nil)
 	return nil
@@ -213,13 +213,13 @@ func logStructured(level, component, message string, data map[string]interface{}
 		Component: component,
 		Data:      data,
 	}
-	
+
 	jsonData, err := json.Marshal(entry)
 	if err != nil {
 		log.Printf("Failed to marshal log entry: %v", err)
 		return
 	}
-	
+
 	// Only write to log file if it's initialized (not nil)
 	if logFile != nil {
 		if _, err := logFile.WriteString(string(jsonData) + "\n"); err != nil {
@@ -316,7 +316,7 @@ func validateDB() error {
 
 func main() {
 	log.Printf("BookMinder API starting up...")
-	
+
 	// Initialize logging
 	if err := initLogging(); err != nil {
 		log.Fatalf("Failed to initialize logging: %v", err)
@@ -326,17 +326,17 @@ func main() {
 			log.Printf("Failed to close log file: %v", err)
 		}
 	}()
-	
+
 	logStructured("INFO", "startup", "BookMinder API starting up", nil)
-	
+
 	// Initialize CORS configuration
 	corsConfig = initCORSConfig()
 	log.Printf("CORS configuration initialized")
-	
-	// Initialize security headers configuration  
+
+	// Initialize security headers configuration
 	securityConfig = initSecurityConfig()
 	log.Printf("Security headers configuration initialized")
-	
+
 	// Initialize database
 	if err := initDatabase(); err != nil {
 		logStructured("ERROR", "database", "Failed to initialize database", map[string]interface{}{
@@ -349,10 +349,10 @@ func main() {
 			log.Printf("Failed to close database: %v", err)
 		}
 	}()
-	
+
 	log.Printf("Registering HTTP handlers")
 	logStructured("INFO", "startup", "Registering HTTP handlers", nil)
-	
+
 	http.HandleFunc("/", withCORS(handleDashboard))
 	http.HandleFunc("/projects", withCORS(handleProjectsPage))
 	http.HandleFunc("/project-detail", withCORS(handleProjectDetailPage))
@@ -402,20 +402,20 @@ func main() {
 		mcpPort = "9091"
 	}
 	log.Printf("  MCP server: http://localhost:%s (SSE transport)", mcpPort)
-	
+
 	port := ":9090"
 	log.Printf("Starting server on port %s", port)
 	fmt.Printf("BookMinder API server starting on %s\n", port)
-	
+
 	logStructured("INFO", "startup", "Server starting", map[string]interface{}{
-		"port": port,
+		"port":      port,
 		"endpoints": []string{"/", "/projects", "/bookmark", "/topics", "/api/stats/summary", "/api/bookmarks/triage", "/api/projects", "/api/projects/{topic}", "/api/projects/id/{id}", "/api/bookmarks/{id}"},
 	})
-	
+
 	if err := http.ListenAndServe(port, nil); err != nil {
 		logStructured("ERROR", "server", "Server failed to start", map[string]interface{}{
 			"error": err.Error(),
-			"port": port,
+			"port":  port,
 		})
 		log.Fatalf("Server failed to start: %v", err)
 	}
@@ -449,7 +449,7 @@ func initCORSConfig() CORSConfig {
 	// Load from environment with sensible defaults
 	allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
 	var origins []string
-	
+
 	if allowedOriginsEnv != "" {
 		origins = strings.Split(allowedOriginsEnv, ",")
 		for i, origin := range origins {
@@ -460,19 +460,19 @@ func initCORSConfig() CORSConfig {
 		// Development defaults
 		origins = []string{
 			"http://localhost:3000",
-			"http://localhost:8080", 
+			"http://localhost:8080",
 			"http://127.0.0.1:3000",
 			"http://127.0.0.1:8080",
 		}
 		log.Printf("CORS using development defaults: %v", origins)
 	}
-	
+
 	// Emergency wildcard override (development only)
 	allowWildcard := os.Getenv("CORS_ALLOW_WILDCARD") == "true"
 	if allowWildcard {
 		log.Printf("WARNING: CORS wildcard enabled - NOT FOR PRODUCTION!")
 	}
-	
+
 	return CORSConfig{
 		AllowedOrigins: origins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -486,19 +486,19 @@ func (c *CORSConfig) isOriginAllowed(origin string) bool {
 	if origin == "" {
 		return true // Same-origin requests
 	}
-	
+
 	// Emergency wildcard override (development only)
 	if c.AllowWildcard {
 		return true
 	}
-	
+
 	// Check exact matches
 	for _, allowed := range c.AllowedOrigins {
 		if origin == allowed {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -509,14 +509,14 @@ func initSecurityConfig() SecurityConfig {
 		// Secure default CSP - restrictive but functional
 		csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
 	}
-	
+
 	hstsMaxAge := os.Getenv("HSTS_MAX_AGE")
 	if hstsMaxAge == "" {
 		hstsMaxAge = "31536000" // 1 year
 	}
-	
+
 	enableHSTS := os.Getenv("ENABLE_HSTS") != "false" // Default to enabled
-	
+
 	return SecurityConfig{
 		ContentSecurityPolicy: csp,
 		XFrameOptions:         "DENY",
@@ -536,12 +536,12 @@ func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("X-Content-Type-Options", securityConfig.XContentTypeOptions)
 		w.Header().Set("Referrer-Policy", securityConfig.ReferrerPolicy)
 		w.Header().Set("Permissions-Policy", securityConfig.PermissionsPolicy)
-		
+
 		// Only set HSTS for HTTPS requests
 		if securityConfig.EnableHSTS && r.TLS != nil {
 			w.Header().Set("Strict-Transport-Security", fmt.Sprintf("max-age=%s; includeSubDomains", securityConfig.HSTSMaxAge))
 		}
-		
+
 		// Call the next handler
 		next.ServeHTTP(w, r)
 	}
@@ -550,7 +550,7 @@ func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		
+
 		// Set CORS headers only for allowed origins
 		if corsConfig.isOriginAllowed(origin) {
 			if origin != "" {
@@ -598,17 +598,17 @@ func withCORS(handler http.HandlerFunc) http.HandlerFunc {
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to / from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Dashboard request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
-		"user_agent": r.UserAgent(),
+		"user_agent":  r.UserAgent(),
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -622,7 +622,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
-	
+
 	dashboardHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read dashboard.html: %v", err)
@@ -644,23 +644,23 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to serve dashboard", http.StatusInternalServerError)
 		return
 	}
-	
+
 	logStructured("INFO", "api", "Dashboard served successfully", nil)
 }
 
 func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /projects from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Projects page request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
-		"user_agent": r.UserAgent(),
+		"user_agent":  r.UserAgent(),
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -674,7 +674,7 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
-	
+
 	projectsHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read projects.html: %v", err)
@@ -695,23 +695,23 @@ func handleProjectsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to serve projects page", http.StatusInternalServerError)
 		return
 	}
-	
+
 	logStructured("INFO", "api", "Projects page served successfully", nil)
 }
 
 func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /project-detail from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Project detail page request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
-		"user_agent": r.UserAgent(),
+		"user_agent":  r.UserAgent(),
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -725,7 +725,7 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "File not accessible", http.StatusForbidden)
 		return
 	}
-	
+
 	projectDetailHTML, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("Failed to read project-detail.html: %v", err)
@@ -742,23 +742,23 @@ func handleProjectDetailPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to serve project detail page", http.StatusInternalServerError)
 		return
 	}
-	
+
 	logStructured("INFO", "api", "Project detail page served successfully", nil)
 }
 
 func handleBookmark(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /bookmark from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Bookmark request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
-		"user_agent": r.UserAgent(),
+		"user_agent":  r.UserAgent(),
 	})
-	
+
 	if r.Method != http.MethodPost {
 		log.Printf("Method not allowed: %s (expected POST)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "POST",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -775,14 +775,14 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Parsed bookmark request: URL=%s, Title=%s, Action=%s, Topic=%s", 
+	log.Printf("Parsed bookmark request: URL=%s, Title=%s, Action=%s, Topic=%s",
 		sanitizeForLog(req.URL), sanitizeForLog(req.Title), sanitizeForLog(req.Action), sanitizeForLog(req.Topic))
 
 	logStructured("INFO", "api", "Bookmark request parsed", map[string]interface{}{
-		"url": req.URL,
-		"title": req.Title,
-		"action": req.Action,
-		"topic": req.Topic,
+		"url":         req.URL,
+		"title":       req.Title,
+		"action":      req.Action,
+		"topic":       req.Topic,
 		"has_content": len(req.Content) > 0,
 	})
 
@@ -802,7 +802,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to save bookmark to database: %v", sanitizeForLog(err.Error()))
 		logStructured("ERROR", "database", "Failed to save bookmark", map[string]interface{}{
 			"error": err.Error(),
-			"url": req.URL,
+			"url":   req.URL,
 		})
 		http.Error(w, "Failed to save bookmark", http.StatusInternalServerError)
 		return
@@ -810,11 +810,11 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Successfully saved bookmark: %s", sanitizeForLog(req.URL))
 	logStructured("INFO", "database", "Bookmark saved successfully", map[string]interface{}{
-		"url": req.URL,
-		"title": req.Title,
+		"url":    req.URL,
+		"title":  req.Title,
 		"action": req.Action,
 	})
-	
+
 	// Fetch the created bookmark to return complete data
 	var bookmarkID int
 	err := db.QueryRow("SELECT id FROM bookmarks WHERE url = ? ORDER BY id DESC LIMIT 1", req.URL).Scan(&bookmarkID)
@@ -827,7 +827,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	// Get the complete bookmark data
 	createdBookmark, err := getBookmarkByID(bookmarkID)
 	if err != nil {
@@ -839,7 +839,7 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(createdBookmark); err != nil {
 		log.Printf("Failed to encode bookmark response: %v", err)
@@ -849,16 +849,16 @@ func handleBookmark(w http.ResponseWriter, r *http.Request) {
 
 func handleTopics(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /topics from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Topics request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -877,10 +877,10 @@ func handleTopics(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Successfully retrieved %d topics", len(topics))
 	logStructured("INFO", "database", "Topics retrieved successfully", map[string]interface{}{
-		"count": len(topics),
+		"count":  len(topics),
 		"topics": topics,
 	})
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string][]string{"topics": topics}); err != nil {
 		log.Printf("Failed to encode topics response: %v", err)
@@ -896,14 +896,14 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 	}
 
 	log.Printf("Saving bookmark to database: %s", sanitizeForLog(req.URL))
-	
+
 	logStructured("INFO", "database", "Saving bookmark", map[string]interface{}{
-		"url": req.URL,
-		"title": req.Title,
-		"action": req.Action,
+		"url":            req.URL,
+		"title":          req.Title,
+		"action":         req.Action,
 		"content_length": len(req.Content),
 	})
-	
+
 	// Convert tags and custom properties to JSON
 	tagsJSON := tagsToJSON(req.Tags)
 	customPropsJSON := customPropsToJSON(req.CustomProperties)
@@ -912,69 +912,69 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 	var existingID int
 	checkSQL := `SELECT id FROM bookmarks WHERE url = ? AND (deleted = FALSE OR deleted IS NULL) LIMIT 1`
 	err := db.QueryRow(checkSQL, req.URL).Scan(&existingID)
-	
+
 	if err == nil {
 		// Bookmark exists, update it
 		log.Printf("Updating existing bookmark with ID: %d", existingID)
 		logStructured("INFO", "database", "Updating existing bookmark", map[string]interface{}{
-			"id": existingID,
+			"id":  existingID,
 			"url": req.URL,
 		})
-		
+
 		updateSQL := `
 		UPDATE bookmarks 
 		SET title = ?, description = ?, content = ?, action = ?, shareTo = ?, topic = ?, tags = ?, custom_properties = ?, timestamp = CURRENT_TIMESTAMP
 		WHERE id = ?`
-		
+
 		_, err = db.Exec(updateSQL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic, tagsJSON, customPropsJSON, existingID)
 		if err != nil {
 			log.Printf("Failed to update bookmark: %v", err)
 			logStructured("ERROR", "database", "Update failed", map[string]interface{}{
 				"error": err.Error(),
-				"id": existingID,
-				"url": req.URL,
+				"id":    existingID,
+				"url":   req.URL,
 			})
 			return err
 		}
-		
+
 		log.Printf("Successfully updated bookmark with ID: %d", existingID)
 		logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
-			"id": existingID,
-			"url": req.URL,
+			"id":    existingID,
+			"url":   req.URL,
 			"title": req.Title,
 		})
-		
+
 		return nil
 	} else if err != sql.ErrNoRows {
 		// Database error
 		log.Printf("Error checking for existing bookmark: %v", err)
 		logStructured("ERROR", "database", "Error checking existing bookmark", map[string]interface{}{
 			"error": err.Error(),
-			"url": req.URL,
+			"url":   req.URL,
 		})
 		return err
 	}
-	
+
 	// No existing bookmark found, create new one
 	log.Printf("Creating new bookmark for URL: %s", sanitizeForLog(req.URL))
 	logStructured("INFO", "database", "Creating new bookmark", map[string]interface{}{
 		"url": req.URL,
 	})
-	
+
 	insertSQL := `
 	INSERT INTO bookmarks (url, title, description, content, action, shareTo, topic, tags, custom_properties)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	
+
 	result, err := db.Exec(insertSQL, req.URL, req.Title, req.Description, req.Content, req.Action, req.ShareTo, req.Topic, tagsJSON, customPropsJSON)
 	if err != nil {
 		log.Printf("Failed to insert bookmark: %v", err)
 		logStructured("ERROR", "database", "Insert failed", map[string]interface{}{
 			"error": err.Error(),
-			"url": req.URL,
+			"url":   req.URL,
 		})
 		return err
 	}
-	
+
 	id, err := result.LastInsertId()
 	if err != nil {
 		log.Printf("Failed to get last insert ID: %v", err)
@@ -983,24 +983,24 @@ func saveBookmarkToDB(req BookmarkRequest) error {
 		})
 		return err
 	}
-	
+
 	log.Printf("Successfully created bookmark with ID: %d", id)
 	logStructured("INFO", "database", "Bookmark created", map[string]interface{}{
-		"id": id,
-		"url": req.URL,
+		"id":    id,
+		"url":   req.URL,
 		"title": req.Title,
 	})
-	
+
 	return nil
 }
 
 func getTopicsFromDB() ([]string, error) {
 	log.Printf("Reading topics from database")
-	
+
 	logStructured("INFO", "database", "Querying topics", nil)
-	
+
 	querySQL := `SELECT DISTINCT topic FROM bookmarks WHERE topic IS NOT NULL AND topic != '' AND (deleted = FALSE OR deleted IS NULL) ORDER BY topic`
-	
+
 	rows, err := db.Query(querySQL)
 	if err != nil {
 		log.Printf("Failed to query topics: %v", err)
@@ -1014,7 +1014,7 @@ func getTopicsFromDB() ([]string, error) {
 			log.Printf("Failed to close rows: %v", err)
 		}
 	}()
-	
+
 	var topics []string
 	for rows.Next() {
 		var topic string
@@ -1027,7 +1027,7 @@ func getTopicsFromDB() ([]string, error) {
 		}
 		topics = append(topics, topic)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		log.Printf("Error iterating topics: %v", err)
 		logStructured("ERROR", "database", "Topics iteration failed", map[string]interface{}{
@@ -1035,29 +1035,29 @@ func getTopicsFromDB() ([]string, error) {
 		})
 		return nil, err
 	}
-	
+
 	log.Printf("Found %d unique topics", len(topics))
 	log.Printf("Returning topics: %v", topics)
 	logStructured("INFO", "database", "Topics query completed", map[string]interface{}{
-		"count": len(topics),
+		"count":  len(topics),
 		"topics": topics,
 	})
-	
+
 	return topics, nil
 }
 
 func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /api/stats/summary from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Stats summary request received", map[string]interface{}{
-		"method": r.Method,
+		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1077,12 +1077,12 @@ func handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Successfully retrieved stats summary")
 	logStructured("INFO", "database", "Stats summary retrieved", map[string]interface{}{
 		"totalBookmarks": stats.TotalBookmarks,
-		"needsTriage": stats.NeedsTriage,
+		"needsTriage":    stats.NeedsTriage,
 		"activeProjects": stats.ActiveProjects,
-		"readyToShare": stats.ReadyToShare,
-		"archived": stats.Archived,
+		"readyToShare":   stats.ReadyToShare,
+		"archived":       stats.Archived,
 	})
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(stats); err != nil {
 		log.Printf("Failed to encode stats response: %v", err)
@@ -1098,15 +1098,15 @@ func getStatsSummary() (*SummaryStats, error) {
 	}
 
 	logStructured("INFO", "database", "Computing stats summary", nil)
-	
+
 	stats := &SummaryStats{}
-	
+
 	// Get total bookmarks count
 	err := db.QueryRow("SELECT COUNT(*) FROM bookmarks WHERE deleted = FALSE OR deleted IS NULL").Scan(&stats.TotalBookmarks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count total bookmarks: %v", err)
 	}
-	
+
 	// Count by action categories
 	// needsTriage: bookmarks with no action or action = "read-later"
 	err = db.QueryRow(`
@@ -1116,7 +1116,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to count needs triage: %v", err)
 	}
-	
+
 	// activeProjects: unique topics in "working" action
 	err = db.QueryRow(`
 		SELECT COUNT(DISTINCT topic) FROM bookmarks 
@@ -1125,7 +1125,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to count active projects: %v", err)
 	}
-	
+
 	// readyToShare: bookmarks with action = "share"
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM bookmarks 
@@ -1134,7 +1134,7 @@ func getStatsSummary() (*SummaryStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to count ready to share: %v", err)
 	}
-	
+
 	// archived: bookmarks with action = "archived"
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM bookmarks 
@@ -1143,23 +1143,23 @@ func getStatsSummary() (*SummaryStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to count archived: %v", err)
 	}
-	
+
 	// Get project stats for working topics
 	projectStats, err := getProjectStats()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project stats: %v", err)
 	}
 	stats.ProjectStats = projectStats
-	
+
 	logStructured("INFO", "database", "Stats summary computed", map[string]interface{}{
 		"totalBookmarks": stats.TotalBookmarks,
-		"needsTriage": stats.NeedsTriage,
+		"needsTriage":    stats.NeedsTriage,
 		"activeProjects": stats.ActiveProjects,
-		"readyToShare": stats.ReadyToShare,
-		"archived": stats.Archived,
-		"projectCount": len(stats.ProjectStats),
+		"readyToShare":   stats.ReadyToShare,
+		"archived":       stats.Archived,
+		"projectCount":   len(stats.ProjectStats),
 	})
-	
+
 	return stats, nil
 }
 
@@ -1193,7 +1193,7 @@ func getProjectStats() ([]ProjectStat, error) {
 			)
 		ORDER BY stats.lastUpdated DESC
 	`
-	
+
 	rows, err := db.Query(querySQL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query project stats: %v", err)
@@ -1203,24 +1203,24 @@ func getProjectStats() ([]ProjectStat, error) {
 			log.Printf("Failed to close rows: %v", err)
 		}
 	}()
-	
+
 	var projects []ProjectStat
 	for rows.Next() {
 		var project ProjectStat
 		var lastUpdated string
-		
+
 		err := rows.Scan(&project.Topic, &project.Count, &lastUpdated, &project.LatestURL, &project.LatestTitle)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project stat: %v", err)
 		}
-		
+
 		// Parse timestamp and format as ISO 8601
 		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastUpdated); err == nil {
 			project.LastUpdated = timestamp.UTC().Format(time.RFC3339)
 		} else {
 			project.LastUpdated = lastUpdated
 		}
-		
+
 		// Determine status based on recency
 		if timestamp, err := time.Parse(time.RFC3339, project.LastUpdated); err == nil {
 			daysSince := time.Since(timestamp).Hours() / 24
@@ -1234,25 +1234,25 @@ func getProjectStats() ([]ProjectStat, error) {
 		} else {
 			project.Status = "unknown"
 		}
-		
+
 		projects = append(projects, project)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating project stats: %v", err)
 	}
-	
+
 	return projects, nil
 }
 
 func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /api/bookmarks/triage from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Triage queue request received", map[string]interface{}{
 		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
@@ -1267,14 +1267,14 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	limitStr := query.Get("limit")
 	offsetStr := query.Get("offset")
-	
+
 	limit := 10 // default
 	if limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
-	
+
 	offset := 0 // default
 	if offsetStr != "" {
 		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
@@ -1310,12 +1310,12 @@ func handleTriageQueue(w http.ResponseWriter, r *http.Request) {
 
 func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /api/bookmarks from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Bookmarks request received", map[string]interface{}{
 		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
@@ -1331,19 +1331,19 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	action := query.Get("action")
 	limitStr := query.Get("limit")
 	offsetStr := query.Get("offset")
-	
+
 	// Default to getting share bookmarks if no action specified
 	if action == "" {
 		action = "share"
 	}
-	
+
 	limit := 50 // default
 	if limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
-	
+
 	offset := 0 // default
 	if offsetStr != "" {
 		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
@@ -1392,7 +1392,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 		SELECT COUNT(*) FROM bookmarks 
 		WHERE (action IS NULL OR action = '' OR action = 'read-later') AND (deleted = FALSE OR deleted IS NULL)
 	`
-	
+
 	err := db.QueryRow(countSQL).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count triage bookmarks: %v", err)
@@ -1437,13 +1437,13 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
-		
+
 		// Store raw data (HTML escaping will be handled by frontend for display)
-		
+
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
 			bookmark.Timestamp = ts.UTC().Format(time.RFC3339)
-			
+
 			// Calculate age
 			age := time.Since(ts)
 			if age.Hours() < 24 {
@@ -1453,7 +1453,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 			}
 		} else if ts, err := time.Parse(time.RFC3339, timestamp); err == nil {
 			bookmark.Timestamp = timestamp
-			
+
 			// Calculate age for RFC3339 format
 			age := time.Since(ts)
 			if age.Hours() < 24 {
@@ -1465,7 +1465,7 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 			bookmark.Timestamp = timestamp
 			bookmark.Age = "unknown"
 		}
-		
+
 		// Extract domain from URL
 		if bookmark.URL == "" {
 			bookmark.Domain = ""
@@ -1474,10 +1474,10 @@ func getTriageQueue(limit, offset int) (*TriageResponse, error) {
 		} else {
 			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
-		
+
 		// Generate suggested action
 		bookmark.Suggested = getSuggestedAction(bookmark.Domain, bookmark.Title, bookmark.Description)
-		
+
 		bookmarks = append(bookmarks, bookmark)
 	}
 
@@ -1503,7 +1503,7 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 	// First get the total count
 	var total int
 	countSQL := `SELECT COUNT(*) FROM bookmarks WHERE action = ? AND (deleted = FALSE OR deleted IS NULL)`
-	
+
 	err := db.QueryRow(countSQL, action).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count bookmarks for action %s: %v", action, err)
@@ -1517,7 +1517,7 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
 	`
-	
+
 	rows, err := db.Query(querySQL, action, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query bookmarks for action %s: %v", action, err)
@@ -1533,12 +1533,12 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 		var bookmark TriageBookmark
 		var timestamp string
 		var description, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
-		
+
 		err := rows.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &topic, &shareTo, &tagsJSON, &customPropsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bookmark: %v", err)
 		}
-		
+
 		// Set optional fields
 		if description.Valid {
 			bookmark.Description = description.String
@@ -1549,22 +1549,22 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 		if shareTo.Valid {
 			bookmark.ShareTo = shareTo.String
 		}
-		
+
 		// Parse tags and custom properties from JSON
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
-		
+
 		if customPropsJSON.Valid && customPropsJSON.String != "" {
 			bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
 		}
-		
+
 		// Set the action for the response
 		bookmark.Action = action
-		
+
 		// Parse timestamp
 		bookmark.Timestamp = timestamp
-		
+
 		// Extract domain from URL
 		if bookmark.URL == "" {
 			bookmark.Domain = ""
@@ -1573,16 +1573,16 @@ func getBookmarksByAction(action string, limit, offset int) (*TriageResponse, er
 		} else {
 			bookmark.Domain = bookmark.URL
 		}
-		
+
 		// Calculate age
 		bookmark.Age = calculateAge(timestamp)
-		
+
 		// Generate suggested action
 		bookmark.Suggested = getSuggestedAction(bookmark.Domain, bookmark.Title, bookmark.Description)
-		
+
 		bookmarks = append(bookmarks, bookmark)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating bookmark rows: %v", err)
 	}
@@ -1683,11 +1683,21 @@ func getBookmarksByTag(tag string, limit, offset int) (*TriageResponse, error) {
 			return nil, fmt.Errorf("failed to scan bookmark for tag: %v", err)
 		}
 
-		if description.Valid { bookmark.Description = description.String }
-		if topic.Valid { bookmark.Topic = topic.String }
-		if action.Valid { bookmark.Action = action.String }
-		if shareTo.Valid { bookmark.ShareTo = shareTo.String }
-		if aiSummary.Valid { bookmark.AISummary = aiSummary.String }
+		if description.Valid {
+			bookmark.Description = description.String
+		}
+		if topic.Valid {
+			bookmark.Topic = topic.String
+		}
+		if action.Valid {
+			bookmark.Action = action.String
+		}
+		if shareTo.Valid {
+			bookmark.ShareTo = shareTo.String
+		}
+		if aiSummary.Valid {
+			bookmark.AISummary = aiSummary.String
+		}
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
@@ -1782,21 +1792,21 @@ func getSuggestedAction(domain, title, description string) string {
 	domain = strings.ToLower(domain)
 	title = strings.ToLower(title)
 	description = strings.ToLower(description)
-	
+
 	// Check for sharing indicators
 	if strings.Contains(domain, "github") || strings.Contains(domain, "stackoverflow") ||
 		strings.Contains(title, "tutorial") || strings.Contains(title, "guide") ||
 		strings.Contains(description, "share") || strings.Contains(description, "useful") {
 		return "share"
 	}
-	
+
 	// Check for working indicators
 	if strings.Contains(title, "documentation") || strings.Contains(title, "docs") ||
 		strings.Contains(title, "api") || strings.Contains(title, "reference") ||
 		strings.Contains(description, "work") || strings.Contains(description, "project") {
 		return "working"
 	}
-	
+
 	// Default to read-later
 	return "read-later"
 }
@@ -1813,13 +1823,13 @@ func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 		ORDER BY timestamp DESC
 		LIMIT 1
 	`
-	
+
 	row := db.QueryRow(querySQL, urlStr)
-	
+
 	var bookmark TriageBookmark
 	var timestamp string
 	var description, action, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
-	
+
 	err := row.Scan(&bookmark.ID, &bookmark.URL, &bookmark.Title, &description, &timestamp, &action, &topic, &shareTo, &tagsJSON, &customPropsJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1827,7 +1837,7 @@ func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 		}
 		return nil, fmt.Errorf("failed to scan bookmark: %v", err)
 	}
-	
+
 	// Set optional fields
 	if description.Valid {
 		bookmark.Description = description.String
@@ -1841,7 +1851,7 @@ func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 	if shareTo.Valid {
 		bookmark.ShareTo = shareTo.String
 	}
-	
+
 	// Parse tags from JSON
 	if tagsJSON.Valid && tagsJSON.String != "" {
 		var tags []string
@@ -1849,7 +1859,7 @@ func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 			bookmark.Tags = tags
 		}
 	}
-	
+
 	// Parse custom properties from JSON
 	if customPropsJSON.Valid && customPropsJSON.String != "" {
 		var customProps map[string]string
@@ -1857,37 +1867,37 @@ func getBookmarkByURL(urlStr string) (*TriageBookmark, error) {
 			bookmark.CustomProperties = customProps
 		}
 	}
-	
+
 	// Set timestamp and calculate age
 	bookmark.Timestamp = timestamp
 	bookmark.Age = calculateAge(timestamp)
-	
+
 	// Extract domain from URL
 	if parsedURL, err := url.Parse(bookmark.URL); err == nil {
 		bookmark.Domain = parsedURL.Host
 	}
-	
+
 	return &bookmark, nil
 }
 
 func handleBookmarkByURL(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /api/bookmark/by-url from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Bookmark by URL request received", map[string]interface{}{
 		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != "GET" {
 		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	// Get URL parameter
 	urlParam := r.URL.Query().Get("url")
 	if urlParam == "" {
@@ -1896,33 +1906,33 @@ func handleBookmarkByURL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "URL parameter is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validate URL format
 	if _, err := url.Parse(urlParam); err != nil {
 		log.Printf("Invalid URL format: %v", err)
 		logStructured("WARN", "api", "Invalid URL format", map[string]interface{}{
-			"url": urlParam,
+			"url":   urlParam,
 			"error": err.Error(),
 		})
 		http.Error(w, "Invalid URL format", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get bookmark from database
 	bookmark, err := getBookmarkByURL(urlParam)
 	if err != nil {
 		log.Printf("Failed to get bookmark by URL: %v", err)
 		logStructured("ERROR", "api", "Failed to get bookmark by URL", map[string]interface{}{
-			"url": urlParam,
+			"url":   urlParam,
 			"error": err.Error(),
 		})
 		http.Error(w, "Failed to retrieve bookmark", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	// Return empty response if no bookmark found
 	if bookmark == nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -1931,13 +1941,13 @@ func handleBookmarkByURL(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	// Return the bookmark
 	response := map[string]interface{}{
-		"found": true,
+		"found":    true,
 		"bookmark": bookmark,
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Failed to encode bookmark response: %v", err)
 		logStructured("ERROR", "api", "Failed to encode response", map[string]interface{}{
@@ -1946,28 +1956,28 @@ func handleBookmarkByURL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-	
+
 	logStructured("INFO", "api", "Bookmark by URL served successfully", map[string]interface{}{
-		"url": urlParam,
+		"url":   urlParam,
 		"found": true,
 	})
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to /api/projects from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Projects request received", map[string]interface{}{
 		"method":      r.Method,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	// Route to handleProjectSettings for individual project operations (path includes ID)
 	pathWithoutPrefix := strings.TrimPrefix(r.URL.Path, "/api/projects")
 	if pathWithoutPrefix != "" && pathWithoutPrefix != "/" {
 		handleProjectSettings(w, r)
 		return
 	}
-	
+
 	switch r.Method {
 	case http.MethodGet:
 		handleGetProjects(w, r)
@@ -1976,7 +1986,7 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 	default:
 		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":  r.Method,
 			"allowed": []string{"GET", "POST"},
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -2019,7 +2029,7 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validate required fields
 	if strings.TrimSpace(req.Name) == "" {
 		log.Printf("Project name is required")
@@ -2027,12 +2037,12 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Project name is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Set default status if not provided
 	if req.Status == "" {
 		req.Status = "active"
 	}
-	
+
 	// Create the project
 	project, err := createProject(req)
 	if err != nil {
@@ -2044,7 +2054,7 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Project name already exists", http.StatusConflict)
 			return
 		}
-		
+
 		log.Printf("Failed to create project: %v", err)
 		logStructured("ERROR", "database", "Failed to create project", map[string]interface{}{
 			"error": err.Error(),
@@ -2053,13 +2063,13 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create project", http.StatusInternalServerError)
 		return
 	}
-	
+
 	log.Printf("Successfully created project: %s (ID: %d)", sanitizeForLog(project.Name), project.ID)
 	logStructured("INFO", "database", "Project created", map[string]interface{}{
 		"id":   project.ID,
 		"name": project.Name,
 	})
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(project); err != nil {
@@ -2071,14 +2081,14 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request) {
 
 func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to project settings from %s", sanitizeForLog(r.Method), sanitizeForLog(r.RemoteAddr))
-	
+
 	// Extract project ID from URL path
 	path := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 	if path == "" || path == "/" {
 		http.Error(w, "Project ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Handle the existing topic-based routing
 	if !isNumeric(path) {
 		// This is probably a topic-based request, route to existing handler
@@ -2089,14 +2099,14 @@ func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only GET method supported for topic-based projects", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	projectID, err := strconv.Atoi(path)
 	if err != nil {
 		log.Printf("Invalid project ID: %s", sanitizeForLog(path))
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	switch r.Method {
 	case http.MethodGet:
 		handleGetProject(w, r, projectID)
@@ -2107,7 +2117,7 @@ func handleProjectSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		log.Printf("Method not allowed: %s", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed for project settings", map[string]interface{}{
-			"method": r.Method,
+			"method":  r.Method,
 			"allowed": []string{"GET", "PUT", "DELETE"},
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -2122,7 +2132,7 @@ func handleGetProject(w http.ResponseWriter, r *http.Request, projectID int) {
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		
+
 		log.Printf("Failed to get project %d: %v", projectID, err)
 		logStructured("ERROR", "database", "Failed to get project", map[string]interface{}{
 			"error":     err.Error(),
@@ -2131,13 +2141,13 @@ func handleGetProject(w http.ResponseWriter, r *http.Request, projectID int) {
 		http.Error(w, "Failed to get project", http.StatusInternalServerError)
 		return
 	}
-	
+
 	log.Printf("Successfully retrieved project: %d", projectID)
 	logStructured("INFO", "database", "Project retrieved", map[string]interface{}{
 		"projectId": projectID,
 		"name":      project.Name,
 	})
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(project); err != nil {
 		log.Printf("Failed to encode project response: %v", err)
@@ -2154,7 +2164,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	var req ProjectUpdateRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		log.Printf("Failed to decode project update request: %v", sanitizeForLog(err.Error()))
@@ -2165,14 +2175,14 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Parse raw JSON to check if name field was explicitly provided
 	var rawData map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	// If name field is explicitly provided, validate it's not empty
 	if nameValue, nameExists := rawData["name"]; nameExists {
 		if nameStr, ok := nameValue.(string); ok && strings.TrimSpace(nameStr) == "" {
@@ -2185,7 +2195,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 			return
 		}
 	}
-	
+
 	// Update the project
 	project, err := updateProject(projectID, req)
 	if err != nil {
@@ -2194,7 +2204,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		
+
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Printf("Project name already exists: %s", sanitizeForLog(req.Name))
 			logStructured("WARN", "database", "Duplicate project name in update", map[string]interface{}{
@@ -2204,7 +2214,7 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 			http.Error(w, "Project name already exists", http.StatusConflict)
 			return
 		}
-		
+
 		log.Printf("Failed to update project %d: %v", projectID, err)
 		logStructured("ERROR", "database", "Failed to update project", map[string]interface{}{
 			"error":     err.Error(),
@@ -2213,13 +2223,13 @@ func handleUpdateProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		http.Error(w, "Failed to update project", http.StatusInternalServerError)
 		return
 	}
-	
+
 	log.Printf("Successfully updated project: %d", projectID)
 	logStructured("INFO", "database", "Project updated", map[string]interface{}{
 		"projectId": projectID,
 		"name":      project.Name,
 	})
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(project); err != nil {
 		log.Printf("Failed to encode updated project response: %v", err)
@@ -2237,7 +2247,7 @@ func handleDeleteProject(w http.ResponseWriter, r *http.Request, projectID int) 
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		
+
 		log.Printf("Failed to check project existence %d: %v", projectID, err)
 		logStructured("ERROR", "database", "Failed to check project for deletion", map[string]interface{}{
 			"error":     err.Error(),
@@ -2246,7 +2256,7 @@ func handleDeleteProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		http.Error(w, "Failed to check project", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Delete the project (this should cascade to bookmarks)
 	err = deleteProject(projectID)
 	if err != nil {
@@ -2258,12 +2268,12 @@ func handleDeleteProject(w http.ResponseWriter, r *http.Request, projectID int) 
 		http.Error(w, "Failed to delete project", http.StatusInternalServerError)
 		return
 	}
-	
+
 	log.Printf("Successfully deleted project: %d", projectID)
 	logStructured("INFO", "database", "Project deleted", map[string]interface{}{
 		"projectId": projectID,
 	})
-	
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2273,23 +2283,23 @@ func createProject(req ProjectCreateRequest) (*Project, error) {
 	logStructured("INFO", "database", "Creating project", map[string]interface{}{
 		"name": req.Name,
 	})
-	
+
 	now := time.Now()
-	
+
 	result, err := db.Exec(`
 		INSERT INTO projects (name, description, status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)
 	`, req.Name, req.Description, req.Status, now, now)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	id, err := result.LastInsertId()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	project := &Project{
 		ID:          int(id),
 		Name:        req.Name,
@@ -2299,7 +2309,7 @@ func createProject(req ProjectCreateRequest) (*Project, error) {
 		CreatedAt:   now.Format(time.RFC3339),
 		UpdatedAt:   now.Format(time.RFC3339),
 	}
-	
+
 	return project, nil
 }
 
@@ -2307,10 +2317,10 @@ func getProjectByID(projectID int) (*Project, error) {
 	logStructured("INFO", "database", "Getting project by ID", map[string]interface{}{
 		"projectId": projectID,
 	})
-	
+
 	var project Project
 	var createdAt, updatedAt time.Time
-	
+
 	err := db.QueryRow(`
 		SELECT p.id, p.name, p.description, p.status, p.created_at, p.updated_at,
 		       COUNT(b.id) as link_count
@@ -2327,15 +2337,15 @@ func getProjectByID(projectID int) (*Project, error) {
 		&updatedAt,
 		&project.LinkCount,
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	project.CreatedAt = createdAt.Format(time.RFC3339)
 	project.UpdatedAt = updatedAt.Format(time.RFC3339)
 	project.LastUpdated = updatedAt.Format(time.RFC3339)
-	
+
 	return &project, nil
 }
 
@@ -2343,38 +2353,38 @@ func updateProject(projectID int, req ProjectUpdateRequest) (*Project, error) {
 	logStructured("INFO", "database", "Updating project", map[string]interface{}{
 		"projectId": projectID,
 	})
-	
+
 	// Build dynamic query based on provided fields
 	var setParts []string
 	var args []interface{}
-	
+
 	if req.Name != "" {
 		setParts = append(setParts, "name = ?")
 		args = append(args, req.Name)
 	}
-	
+
 	if req.Description != "" {
 		setParts = append(setParts, "description = ?")
 		args = append(args, req.Description)
 	}
-	
+
 	if req.Status != "" {
 		setParts = append(setParts, "status = ?")
 		args = append(args, req.Status)
 	}
-	
+
 	if len(setParts) == 0 {
 		// No fields to update, just return current project
 		return getProjectByID(projectID)
 	}
-	
+
 	// Always update the updated_at timestamp
 	setParts = append(setParts, "updated_at = ?")
 	args = append(args, time.Now())
-	
+
 	// Add projectID to args for WHERE clause
 	args = append(args, projectID)
-	
+
 	// Use whitelist approach to prevent SQL injection
 	allowedColumns := map[string]bool{
 		"name = ?":        true,
@@ -2382,30 +2392,30 @@ func updateProject(projectID int, req ProjectUpdateRequest) (*Project, error) {
 		"status = ?":      true,
 		"updated_at = ?":  true,
 	}
-	
+
 	// Validate all setParts against whitelist
 	for _, part := range setParts {
 		if !allowedColumns[part] {
 			return nil, fmt.Errorf("invalid column in update: %s", part)
 		}
 	}
-	
+
 	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = ?", strings.Join(setParts, ", "))
-	
+
 	result, err := db.Exec(query, args...)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if rowsAffected == 0 {
 		return nil, sql.ErrNoRows
 	}
-	
+
 	// Return updated project
 	return getProjectByID(projectID)
 }
@@ -2414,7 +2424,7 @@ func deleteProject(projectID int) error {
 	logStructured("INFO", "database", "Deleting project", map[string]interface{}{
 		"projectId": projectID,
 	})
-	
+
 	// First, update any bookmarks that reference this project to remove the reference
 	// We'll set project_id to NULL and keep the topic for backward compatibility
 	_, err := db.Exec(`
@@ -2422,26 +2432,26 @@ func deleteProject(projectID int) error {
 		SET project_id = NULL 
 		WHERE project_id = ?
 	`, projectID)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to update bookmarks: %v", err)
 	}
-	
+
 	// Now delete the project
 	result, err := db.Exec("DELETE FROM projects WHERE id = ?", projectID)
 	if err != nil {
 		return err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	
+
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
-	
+
 	return nil
 }
 
@@ -2453,7 +2463,7 @@ func isNumeric(s string) bool {
 
 func getProjects() (*ProjectsResponse, error) {
 	logStructured("INFO", "database", "Getting projects data", nil)
-	
+
 	response := &ProjectsResponse{
 		ActiveProjects:       []ActiveProject{},
 		ReferenceCollections: []ReferenceCollection{},
@@ -2495,7 +2505,7 @@ func getActiveProjects() ([]ActiveProject, error) {
 		HAVING COUNT(b.id) > 0
 		ORDER BY MAX(COALESCE(b.timestamp, p.updated_at)) DESC
 	`
-	
+
 	rows, err := db.Query(querySQL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active projects: %v", err)
@@ -2510,19 +2520,19 @@ func getActiveProjects() ([]ActiveProject, error) {
 	for rows.Next() {
 		var project ActiveProject
 		var lastUpdated string
-		
+
 		err := rows.Scan(&project.ID, &project.Topic, &project.LinkCount, &lastUpdated)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan active project: %v", err)
 		}
-		
+
 		// Parse timestamp and format as ISO 8601
 		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastUpdated); err == nil {
 			project.LastUpdated = timestamp.UTC().Format(time.RFC3339)
 		} else {
 			project.LastUpdated = lastUpdated
 		}
-		
+
 		// Determine status based on recency and calculate progress
 		if timestamp, err := time.Parse(time.RFC3339, project.LastUpdated); err == nil {
 			daysSince := time.Since(timestamp).Hours() / 24
@@ -2536,8 +2546,7 @@ func getActiveProjects() ([]ActiveProject, error) {
 		} else {
 			project.Status = "unknown"
 		}
-		
-		
+
 		projects = append(projects, project)
 	}
 
@@ -2570,7 +2579,7 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 		GROUP BY topic
 		ORDER BY COUNT(*) DESC, MAX(timestamp) DESC
 	`
-	
+
 	rows, err := db.Query(querySQL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reference collections: %v", err)
@@ -2585,19 +2594,19 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 	for rows.Next() {
 		var collection ReferenceCollection
 		var lastAccessed string
-		
+
 		err := rows.Scan(&collection.Topic, &collection.LinkCount, &lastAccessed)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan reference collection: %v", err)
 		}
-		
+
 		// Parse timestamp and format as ISO 8601
 		if timestamp, err := time.Parse("2006-01-02 15:04:05", lastAccessed); err == nil {
 			collection.LastAccessed = timestamp.UTC().Format(time.RFC3339)
 		} else {
 			collection.LastAccessed = lastAccessed
 		}
-		
+
 		collections = append(collections, collection)
 	}
 
@@ -2610,13 +2619,13 @@ func getReferenceCollections() ([]ReferenceCollection, error) {
 
 func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Project detail request received", map[string]interface{}{
 		"method":      r.Method,
 		"path":        r.URL.Path,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
@@ -2671,9 +2680,9 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Successfully retrieved project detail for '%s' with %d bookmarks", sanitizeForLog(topic), len(projectDetail.Bookmarks))
 	logStructured("INFO", "database", "Project detail retrieved", map[string]interface{}{
-		"topic":          topic,
-		"bookmarkCount":  len(projectDetail.Bookmarks),
-		"status":         projectDetail.Status,
+		"topic":         topic,
+		"bookmarkCount": len(projectDetail.Bookmarks),
+		"status":        projectDetail.Status,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2686,17 +2695,17 @@ func handleProjectDetail(w http.ResponseWriter, r *http.Request) {
 
 func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Project by ID request received", map[string]interface{}{
-		"method": r.Method,
-		"path": r.URL.Path,
+		"method":      r.Method,
+		"path":        r.URL.Path,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodGet {
 		log.Printf("Method not allowed: %s (expected GET)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
-			"method": r.Method,
+			"method":   r.Method,
 			"expected": "GET",
 		})
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -2719,7 +2728,7 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Invalid project ID: %s", sanitizeForLog(path))
 		logStructured("WARN", "api", "Invalid project ID", map[string]interface{}{
 			"provided_id": path,
-			"error": err.Error(),
+			"error":       err.Error(),
 		})
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
@@ -2738,7 +2747,7 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to get project detail for ID %d: %v", projectID, err)
 		logStructured("ERROR", "database", "Failed to get project detail by ID", map[string]interface{}{
 			"project_id": projectID,
-			"error": err.Error(),
+			"error":      err.Error(),
 		})
 		http.Error(w, "Failed to get project detail", http.StatusInternalServerError)
 		return
@@ -2746,10 +2755,10 @@ func handleProjectByID(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Successfully retrieved project detail for ID %d with %d bookmarks", projectID, len(projectDetail.Bookmarks))
 	logStructured("INFO", "database", "Project detail retrieved by ID", map[string]interface{}{
-		"project_id":     projectID,
-		"project_name":   projectDetail.Topic,
-		"bookmarkCount":  len(projectDetail.Bookmarks),
-		"status":         projectDetail.Status,
+		"project_id":    projectID,
+		"project_name":  projectDetail.Topic,
+		"bookmarkCount": len(projectDetail.Bookmarks),
+		"status":        projectDetail.Status,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2777,11 +2786,11 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 		FROM bookmarks 
 		WHERE topic = ? AND action = 'working' AND (deleted = FALSE OR deleted IS NULL)
 	`, topic).Scan(&linkCount, &nullableLastUpdated)
-	
+
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get working project info: %v", err)
 	}
-	
+
 	hasWorkingBookmarks = linkCount > 0
 	if nullableLastUpdated.Valid {
 		lastUpdated = nullableLastUpdated.String
@@ -2794,15 +2803,15 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 			FROM bookmarks 
 			WHERE topic = ? AND (deleted = FALSE OR deleted IS NULL)
 		`, topic).Scan(&linkCount, &nullableLastUpdated)
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to get project info: %v", err)
 		}
-		
+
 		if linkCount == 0 {
 			return nil, fmt.Errorf("project not found: %s", topic)
 		}
-		
+
 		if nullableLastUpdated.Valid {
 			lastUpdated = nullableLastUpdated.String
 		}
@@ -2830,7 +2839,6 @@ func getProjectDetail(topic string) (*ProjectDetailResponse, error) {
 	} else {
 		status = "unknown"
 	}
-
 
 	// Get all bookmarks for this topic
 	bookmarks, err := getProjectBookmarks(topic)
@@ -2892,13 +2900,13 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
-		
+
 		// Store raw data (HTML escaping will be handled by frontend for display)
-		
+
 		// Parse and format timestamp
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
 			bookmark.Timestamp = ts.UTC().Format(time.RFC3339)
-			
+
 			// Calculate age
 			age := time.Since(ts)
 			if age.Hours() < 24 {
@@ -2908,7 +2916,7 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 			}
 		} else if ts, err := time.Parse(time.RFC3339, timestamp); err == nil {
 			bookmark.Timestamp = timestamp
-			
+
 			// Calculate age for RFC3339 format
 			age := time.Since(ts)
 			if age.Hours() < 24 {
@@ -2920,7 +2928,7 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 			bookmark.Timestamp = timestamp
 			bookmark.Age = "unknown"
 		}
-		
+
 		// Extract domain from URL
 		if bookmark.URL == "" {
 			bookmark.Domain = ""
@@ -2929,7 +2937,7 @@ func getProjectBookmarks(topic string) ([]ProjectBookmark, error) {
 		} else {
 			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
-		
+
 		bookmarks = append(bookmarks, bookmark)
 	}
 
@@ -2951,9 +2959,9 @@ func getProjectDetailByID(projectID int) (*ProjectDetailResponse, error) {
 		SELECT id, name, description, status, created_at, updated_at
 		FROM projects 
 		WHERE id = ?
-	`, projectID).Scan(&project.ID, &project.Name, &project.Description, 
+	`, projectID).Scan(&project.ID, &project.Name, &project.Description,
 		&project.Status, &project.CreatedAt, &project.LastUpdated)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("project with ID %d not found", projectID)
@@ -2969,7 +2977,7 @@ func getProjectDetailByID(projectID int) (*ProjectDetailResponse, error) {
 		FROM bookmarks 
 		WHERE project_id = ?
 	`, projectID).Scan(&linkCount, &lastBookmarkUpdate)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bookmark stats: %v", err)
 	}
@@ -3061,13 +3069,13 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 		if tagsJSON.Valid && tagsJSON.String != "" {
 			bookmark.Tags = tagsFromJSON(tagsJSON.String)
 		}
-		
+
 		// Store raw data (HTML escaping will be handled by frontend for display)
-		
+
 		// Parse timestamp and calculate age
 		if ts, err := time.Parse("2006-01-02 15:04:05", timestamp); err == nil {
 			bookmark.Timestamp = ts.UTC().Format(time.RFC3339)
-			
+
 			// Calculate age for RFC3339 format
 			age := time.Since(ts)
 			if age.Hours() < 24 {
@@ -3079,7 +3087,7 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 			bookmark.Timestamp = timestamp
 			bookmark.Age = "unknown"
 		}
-		
+
 		// Extract domain from URL
 		if bookmark.URL == "" {
 			bookmark.Domain = ""
@@ -3088,7 +3096,7 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 		} else {
 			bookmark.Domain = bookmark.URL // Return original URL for invalid URLs
 		}
-		
+
 		bookmarks = append(bookmarks, bookmark)
 	}
 
@@ -3101,13 +3109,13 @@ func getProjectBookmarksByID(projectID int) ([]ProjectBookmark, error) {
 
 func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received %s request to %s from %s", sanitizeForLog(r.Method), sanitizeForLog(r.URL.Path), sanitizeForLog(r.RemoteAddr))
-	
+
 	logStructured("INFO", "api", "Bookmark update request received", map[string]interface{}{
 		"method":      r.Method,
 		"path":        r.URL.Path,
 		"remote_addr": r.RemoteAddr,
 	})
-	
+
 	if r.Method != http.MethodPatch && r.Method != http.MethodPut && r.Method != http.MethodDelete {
 		log.Printf("Method not allowed: %s (expected PATCH, PUT, or DELETE)", sanitizeForLog(r.Method))
 		logStructured("WARN", "api", "Method not allowed", map[string]interface{}{
@@ -3191,7 +3199,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("Parsed full bookmark update request: ID=%d, Title=%s, URL=%s, Action=%s", 
+		log.Printf("Parsed full bookmark update request: ID=%d, Title=%s, URL=%s, Action=%s",
 			bookmarkID, sanitizeForLog(req.Title), sanitizeForLog(req.URL), sanitizeForLog(req.Action))
 
 		logStructured("INFO", "api", "Full bookmark update request parsed", map[string]interface{}{
@@ -3222,7 +3230,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s", 
+		log.Printf("Parsed bookmark update request: ID=%d, Action=%s, Topic=%s",
 			bookmarkID, sanitizeForLog(req.Action), sanitizeForLog(req.Topic))
 
 		logStructured("INFO", "api", "Bookmark update request parsed", map[string]interface{}{
@@ -3246,7 +3254,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 	logStructured("INFO", "database", "Bookmark updated successfully", map[string]interface{}{
 		"id": bookmarkID,
 	})
-	
+
 	// Fetch and return the updated bookmark
 	updatedBookmark, err := getBookmarkByID(bookmarkID)
 	if err != nil {
@@ -3258,7 +3266,7 @@ func handleBookmarkUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to fetch updated bookmark", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(updatedBookmark); err != nil {
 		log.Printf("Failed to encode updated bookmark response: %v", err)
@@ -3275,7 +3283,7 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 
 	var bookmark ProjectBookmark
 	var description, content, action, topic, shareTo, tagsJSON, customPropsJSON sql.NullString
-	
+
 	err := db.QueryRow(`
 		SELECT id, url, title, description, content, timestamp, action, topic, shareTo, tags, custom_properties
 		FROM bookmarks 
@@ -3292,7 +3300,7 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 		&tagsJSON,
 		&customPropsJSON,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("bookmark not found")
@@ -3321,17 +3329,17 @@ func getBookmarkByID(id int) (*ProjectBookmark, error) {
 	if tagsJSON.Valid && tagsJSON.String != "" {
 		bookmark.Tags = tagsFromJSON(tagsJSON.String)
 	}
-	
+
 	if customPropsJSON.Valid && customPropsJSON.String != "" {
 		bookmark.CustomProperties = customPropsFromJSON(customPropsJSON.String)
 	}
 
 	// Extract domain from URL
 	bookmark.Domain = extractDomain(bookmark.URL)
-	
+
 	// Calculate age
 	bookmark.Age = calculateAge(bookmark.Timestamp)
-	
+
 	return &bookmark, nil
 }
 
@@ -3353,16 +3361,16 @@ func calculateAge(timestamp string) string {
 			return "unknown"
 		}
 	}
-	
+
 	now := time.Now()
 	diff := now.Sub(t)
-	
+
 	minutes := int(diff.Minutes())
 	hours := int(diff.Hours())
 	days := int(diff.Hours() / 24)
 	weeks := days / 7
 	months := days / 30
-	
+
 	if minutes < 1 {
 		return "just now"
 	} else if minutes < 60 {
@@ -3429,18 +3437,18 @@ func customPropsFromJSON(jsonStr string) map[string]string {
 
 func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 	log.Printf("Updating bookmark in database: %d", id)
-	
+
 	logStructured("INFO", "database", "Updating bookmark", map[string]interface{}{
 		"id":        id,
 		"action":    req.Action,
 		"topic":     req.Topic,
 		"projectId": req.ProjectID,
 	})
-	
+
 	// Handle project assignment - support both topic and project_id
 	var projectID *int
 	var topic string
-	
+
 	if req.ProjectID > 0 {
 		// Use provided project ID
 		projectID = &req.ProjectID
@@ -3464,7 +3472,7 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 				log.Printf("Failed to create project for topic %s: %v", sanitizeForLog(req.Topic), err)
 				return fmt.Errorf("failed to create project for topic %s", req.Topic)
 			}
-			
+
 			newID, err := result.LastInsertId()
 			if err != nil {
 				return fmt.Errorf("failed to get new project ID")
@@ -3478,13 +3486,13 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		projectID = nil
 		topic = ""
 	}
-	
+
 	// Convert tags and custom properties to JSON
 	tagsJSON := tagsToJSON(req.Tags)
 	customPropsJSON := customPropsToJSON(req.CustomProperties)
 
 	updateSQL := `UPDATE bookmarks SET action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ? WHERE id = ?`
-	
+
 	result, err := db.Exec(updateSQL, req.Action, req.ShareTo, topic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		log.Printf("Failed to update bookmark: %v", err)
@@ -3494,7 +3502,7 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		})
 		return err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		log.Printf("Failed to get rows affected: %v", err)
@@ -3503,7 +3511,7 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		})
 		return err
 	}
-	
+
 	if rowsAffected == 0 {
 		log.Printf("No bookmark found with ID: %d", id)
 		logStructured("WARN", "database", "No bookmark found", map[string]interface{}{
@@ -3511,28 +3519,28 @@ func updateBookmarkInDB(id int, req BookmarkUpdateRequest) error {
 		})
 		return fmt.Errorf("bookmark not found")
 	}
-	
+
 	log.Printf("Successfully updated bookmark with ID: %d", id)
 	logStructured("INFO", "database", "Bookmark updated", map[string]interface{}{
 		"id":           id,
 		"rowsAffected": rowsAffected,
 	})
-	
+
 	return nil
 }
 
 func softDeleteBookmarkInDB(id int) error {
 	log.Printf("Soft deleting bookmark in database: %d", id)
-	
+
 	logStructured("INFO", "database", "Soft deleting bookmark", map[string]interface{}{
 		"id": id,
 	})
-	
+
 	// Validate database connection first
 	if err := validateDB(); err != nil {
 		return fmt.Errorf("failed to validate database connection: %v", err)
 	}
-	
+
 	// Update the bookmark to mark it as deleted
 	result, err := db.Exec("UPDATE bookmarks SET deleted = TRUE WHERE id = ? AND (deleted = FALSE OR deleted IS NULL)", id)
 	if err != nil {
@@ -3542,21 +3550,21 @@ func softDeleteBookmarkInDB(id int) error {
 		})
 		return fmt.Errorf("failed to soft delete bookmark: %v", err)
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %v", err)
 	}
-	
+
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
-	
+
 	logStructured("INFO", "database", "Bookmark soft deleted", map[string]interface{}{
 		"id":           id,
 		"rowsAffected": rowsAffected,
 	})
-	
+
 	return nil
 }
 
@@ -3567,16 +3575,16 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 	}
 
 	log.Printf("Updating full bookmark in database: %d", id)
-	
+
 	// Validate required fields
 	if req.Title == "" || req.URL == "" {
 		return fmt.Errorf("title and URL are required fields")
 	}
-	
+
 	// Handle project assignment logic similar to partial update
 	var projectID sql.NullInt64
 	var actualTopic string
-	
+
 	if req.Topic != "" {
 		// Look for existing project with this topic/name
 		var existingProjectID int
@@ -3594,15 +3602,15 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 				})
 				return fmt.Errorf("failed to create new project: %v", err)
 			}
-			
+
 			newProjectID, err := result.LastInsertId()
 			if err != nil {
 				return fmt.Errorf("failed to get new project ID: %v", err)
 			}
-			
+
 			projectID = sql.NullInt64{Int64: newProjectID, Valid: true}
 			actualTopic = req.Topic
-			
+
 			logStructured("INFO", "database", "Created new project", map[string]interface{}{
 				"projectId": newProjectID,
 				"topic":     req.Topic,
@@ -3617,14 +3625,14 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 			// Use existing project
 			projectID = sql.NullInt64{Int64: int64(existingProjectID), Valid: true}
 			actualTopic = req.Topic
-			
+
 			logStructured("INFO", "database", "Using existing project", map[string]interface{}{
 				"projectId": existingProjectID,
 				"topic":     req.Topic,
 			})
 		}
 	}
-	
+
 	// Convert tags and custom properties to JSON
 	tagsJSON := tagsToJSON(req.Tags)
 	customPropsJSON := customPropsToJSON(req.CustomProperties)
@@ -3634,8 +3642,8 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		UPDATE bookmarks 
 		SET url = ?, title = ?, description = ?, action = ?, shareTo = ?, topic = ?, project_id = ?, tags = ?, custom_properties = ?
 		WHERE id = ?`
-	
-	result, err := db.Exec(updateSQL, 
+
+	result, err := db.Exec(updateSQL,
 		req.URL, req.Title, req.Description, req.Action, req.ShareTo, actualTopic, projectID, tagsJSON, customPropsJSON, id)
 	if err != nil {
 		logStructured("ERROR", "database", "Failed to execute full bookmark update", map[string]interface{}{
@@ -3644,7 +3652,7 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		})
 		return fmt.Errorf("failed to update bookmark: %v", err)
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		logStructured("ERROR", "database", "Failed to get rows affected", map[string]interface{}{
@@ -3653,14 +3661,14 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		})
 		return fmt.Errorf("failed to check update result: %v", err)
 	}
-	
+
 	if rowsAffected == 0 {
 		logStructured("WARN", "database", "No bookmark found with given ID", map[string]interface{}{
 			"id": id,
 		})
 		return fmt.Errorf("no bookmark found with ID %d", id)
 	}
-	
+
 	log.Printf("Successfully updated full bookmark with ID: %d", id)
 	logStructured("INFO", "database", "Full bookmark update completed", map[string]interface{}{
 		"id":           id,
@@ -3670,7 +3678,7 @@ func updateFullBookmarkInDB(id int, req BookmarkFullUpdateRequest) error {
 		"topic":        actualTopic,
 		"rowsAffected": rowsAffected,
 	})
-	
+
 	return nil
 }
 
@@ -3740,34 +3748,34 @@ func handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 func validateHTMLFile(filename string) error {
 	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filename)
-	
+
 	// Ensure the file has .html extension
 	if !strings.HasSuffix(cleanPath, ".html") {
 		return fmt.Errorf("invalid file extension")
 	}
-	
+
 	// Get absolute path of current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %v", err)
 	}
-	
+
 	// Get absolute path of the requested file
 	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %v", err)
 	}
-	
+
 	// Ensure the file is within the current working directory
 	if !strings.HasPrefix(absPath, cwd) {
 		return fmt.Errorf("file path outside allowed directory")
 	}
-	
+
 	// Additional check: prevent any path containing ".."
 	if strings.Contains(cleanPath, "..") {
 		return fmt.Errorf("invalid file path contains directory traversal")
 	}
-	
+
 	return nil
 }
 
@@ -3780,13 +3788,13 @@ func validateBookmarkInput(req BookmarkRequest) error {
 	if strings.TrimSpace(req.Title) == "" {
 		return fmt.Errorf("title is required")
 	}
-	
+
 	// Validate URL format
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return fmt.Errorf("invalid URL format")
 	}
-	
+
 	// Validate input lengths
 	if len(req.URL) > 2048 {
 		return fmt.Errorf("URL too long (max 2048 characters)")
@@ -3797,6 +3805,6 @@ func validateBookmarkInput(req BookmarkRequest) error {
 	if len(req.Description) > 2000 {
 		return fmt.Errorf("description too long (max 2000 characters)")
 	}
-	
+
 	return nil
 }

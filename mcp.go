@@ -168,16 +168,16 @@ func handleMCPListBookmarks(_ context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	}
 
 	type row struct {
-		ID          int            `json:"id"`
-		Title       string         `json:"title"`
-		URL         string         `json:"url"`
-		Description string         `json:"description,omitempty"`
-		AISummary   string         `json:"ai_summary,omitempty"`
-		Tags        []string       `json:"tags,omitempty"`
-		Action      string         `json:"action,omitempty"`
-		Domain      string         `json:"domain,omitempty"`
-		Age         string         `json:"age,omitempty"`
-		Topic       string         `json:"topic,omitempty"`
+		ID          int      `json:"id"`
+		Title       string   `json:"title"`
+		URL         string   `json:"url"`
+		Description string   `json:"description,omitempty"`
+		AISummary   string   `json:"ai_summary,omitempty"`
+		Tags        []string `json:"tags,omitempty"`
+		Action      string   `json:"action,omitempty"`
+		Domain      string   `json:"domain,omitempty"`
+		Age         string   `json:"age,omitempty"`
+		Topic       string   `json:"topic,omitempty"`
 	}
 
 	where := []string{"(b.deleted = FALSE OR b.deleted IS NULL)"}
@@ -545,7 +545,7 @@ func mcpGetBookmarkFull(id int) (interface{}, error) {
 	if projectID.Valid {
 		b.ProjectID = int(projectID.Int64)
 	}
-	json.Unmarshal([]byte(tagsJSON), &b.Tags)           //nolint
+	json.Unmarshal([]byte(tagsJSON), &b.Tags)               //nolint
 	json.Unmarshal([]byte(customJSON), &b.CustomProperties) //nolint
 	b.Domain = extractDomain(b.URL)
 	b.Age = formatAge(ts)

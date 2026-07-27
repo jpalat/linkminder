@@ -99,7 +99,7 @@ func TestCustomPropsJSONHelpers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := customPropsToJSON(tt.props)
-			
+
 			if tt.name == "multiple props" {
 				// For multiple props, just check that it's valid JSON and round-trips correctly
 				var parsed map[string]string
@@ -319,7 +319,7 @@ func TestBookmarkAPIWithTagsAndProps(t *testing.T) {
 		Topic:       "frontend",
 		Tags:        []string{"vue", "javascript", "spa"},
 		CustomProperties: map[string]string{
-			"framework": "vue",
+			"framework":  "vue",
 			"difficulty": "beginner",
 			"completed":  "false",
 		},
