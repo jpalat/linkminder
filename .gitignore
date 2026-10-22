@@ -4,3 +4,20 @@ bookminderapi
 *db-*
 coverage.out
 *.log
+
+# Build output
+/main
+/test-build
+extension/build/
+
+# Node / tooling caches
+node_modules/
+/package.json
+/package-lock.json
+frontend/.vite/
+
+# Local tool state
+.beads/backup/
+.beads/embeddeddolt/
+.roam/
+.roamignore
